@@ -14,6 +14,9 @@ prompts:
       Audience: {{ audience }}
       Include a brief intro sentence, one supporting detail, and a closing call to action.
       Avoid lists, tables, or markdown formatting. Keep sentences complete and coherent.
+      Respond only with the article text. Do not ask follow-up questions.
+      The final article must be between 300 and 500 characters (inclusive).
+      Write exactly four sentences.
 
 scenarios:
   - id: api_smoke_article

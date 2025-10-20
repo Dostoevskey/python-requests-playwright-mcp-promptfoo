@@ -10,6 +10,9 @@ prompts:
       Audience: {{audience}}
       Provide an opening sentence, one supporting detail, and a closing call to action.
       Avoid bullet lists, markdown, or external references.
+      Respond only with the article text and do not ask follow-up questions.
+      Ensure the final article is 300 to 500 characters long (inclusive).
+      Write exactly four sentences.
 providers:
   - id: ollama:gemma3:4b
     label: gemma3-4b

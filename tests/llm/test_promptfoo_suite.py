@@ -23,8 +23,6 @@ def test_promptfoo_eval(settings, tmp_path: Path) -> None:
         str(settings.promptfoo_config),
         "--output",
         str(report_path),
-        "--format",
-        "json",
     ]
     completed = subprocess.run(command, capture_output=True, text=True)
     allure.attach(completed.stdout, name="promptfoo_stdout", attachment_type=allure.attachment_type.TEXT)
@@ -35,4 +33,11 @@ def test_promptfoo_eval(settings, tmp_path: Path) -> None:
 
     data = json.loads(report_path.read_text())
     allure.attach(json.dumps(data, indent=2), name="promptfoo_report", attachment_type=allure.attachment_type.JSON)
-    assert data["summary"]["fail"] == 0, "Prompt evaluations should pass all assertions"
+
+    prompts = data.get("results", {}).get("prompts", [])
+    failing = [
+        (prompt.get("label", prompt.get("raw", "<unknown>")), prompt.get("metrics", {}))
+        for prompt in prompts
+        if prompt.get("metrics", {}).get("testFailCount", 0) > 0 or prompt.get("metrics", {}).get("testErrorCount", 0) > 0
+    ]
+    assert not failing, f"Promptfoo reported failures: {failing}"

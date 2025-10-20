@@ -7,6 +7,6 @@
     "promptfoo:test:watch": "promptfoo eval --config config/promptfoo.yaml --watch"
   },
   "devDependencies": {
-    "promptfoo": "^0.38.0"
+    "promptfoo": "^0.118.17"
   }
 }

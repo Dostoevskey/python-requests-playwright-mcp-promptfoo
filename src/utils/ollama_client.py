@@ -22,6 +22,7 @@ class OllamaRunner:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url
         self.client = Client(host=base_url)
+        self._chat_models = {"deepseek-r1:8b"}
 
     def ensure_model(self, model: str) -> bool:
         try:
@@ -32,12 +33,31 @@ class OllamaRunner:
 
     def generate(self, model: str, prompt: str, options: dict[str, Any] | None = None) -> OllamaModelResult:
         try:
-            response = self.client.generate(model=model, prompt=prompt, options=options or {})
+            if model in self._chat_models:
+                chat_options = {**(options or {})}
+                chat_options.pop("num_predict", None)
+                chat_response = self.client.chat(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options=chat_options or None,
+                )
+                output = chat_response.message.content or ""
+                tokens: dict[str, Any] = {
+                    "prompt": getattr(chat_response, "prompt_eval_count", None),
+                    "completion": getattr(chat_response, "eval_count", None),
+                }
+            else:
+                response = self.client.generate(model=model, prompt=prompt, options=options or {})
+                output = response.get("response", "")
+                tokens = {
+                    "prompt": response.get("prompt_eval_count"),
+                    "completion": response.get("eval_count"),
+                }
         except Exception as exc:  # noqa: BLE001
             raise OllamaUnavailableError(f"Failed to generate with {model}: {exc}") from exc
-        return OllamaModelResult(model=model, output=response.get("response", ""), tokens=response.get("eval_count", {}))
+        return OllamaModelResult(model=model, output=output, tokens=tokens)
 
-    def evaluate_with_judge(self, judge_model: str, article: str, topic: str) -> bool:
+    def evaluate_with_judge(self, judge_model: str, article: str, topic: str) -> tuple[bool, str]:
         prompt = (
             "You are a critical reviewer. Decide if the article below stays on topic, is coherent, "
             "and avoids hallucinations. Respond with PASS if it meets all criteria, otherwise respond "
@@ -46,8 +66,9 @@ class OllamaRunner:
             "Article:\n" + article.strip()
         )
         result = self.generate(judge_model, prompt, options={"temperature": 0.1})
-        decision = result.output.strip().split()[0].upper()
-        return decision == "PASS"
+        decision_text = result.output.strip()
+        decision = decision_text.split()[0].upper() if decision_text else ""
+        return decision == "PASS", decision_text
 
 
 __all__ = ["OllamaRunner", "OllamaUnavailableError", "OllamaModelResult"]

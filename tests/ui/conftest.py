@@ -14,6 +14,7 @@ def multi_context(browser: Browser) -> Generator[Dict[str, BrowserContext], None
             viewport={"width": 1440, "height": 900},
             record_video_dir="playwright-report",
         )
+        contexts["desktop"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
         contexts["mobile"] = browser.new_context(
             viewport={"width": 414, "height": 896},
             user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
@@ -21,6 +22,7 @@ def multi_context(browser: Browser) -> Generator[Dict[str, BrowserContext], None
             is_mobile=True,
             record_video_dir="playwright-report",
         )
+        contexts["mobile"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
         yield contexts
     finally:
         for context in contexts.values():

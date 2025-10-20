@@ -61,13 +61,21 @@ class ApiClient:
         creds.token = data["user"].get("token")
         return creds
 
-    def update_profile(self, creds: UserCredentials, bio: str | None = None, image: str | None = None) -> dict[str, Any]:
+    def update_profile(
+        self,
+        creds: UserCredentials,
+        bio: str | None = None,
+        image: str | None = None,
+        password: str | None = None,
+    ) -> dict[str, Any]:
         headers = {"Authorization": f"Token {creds.token}"}
         payload = {"user": {}}
         if bio:
             payload["user"]["bio"] = bio
         if image:
             payload["user"]["image"] = image
+        if password:
+            payload["user"]["password"] = password
         response = self.session.put(f"{self.base_url}/user", headers=headers, json=payload, timeout=20)
         return self._raise_for_status(response, expected=(200,))
 

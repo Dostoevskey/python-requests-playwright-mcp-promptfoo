@@ -71,7 +71,16 @@ def settings(pytestconfig: pytest.Config) -> Settings:
         promptfoo_config=promptfoo_path,
     )
 
-    allure.attach(json.dumps(settings_obj.__dict__, indent=2), name="settings", attachment_type=allure.attachment_type.JSON)
+    serializable = {
+        key: (str(value) if isinstance(value, Path) else value)
+        for key, value in settings_obj.__dict__.items()
+    }
+
+    allure.attach(
+        json.dumps(serializable, indent=2),
+        name="settings",
+        attachment_type=allure.attachment_type.JSON,
+    )
 
     return settings_obj
 

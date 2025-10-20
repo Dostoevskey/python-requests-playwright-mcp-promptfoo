@@ -54,10 +54,18 @@ def login_user(session: requests.Session, base_url: str, user: dict[str, Any], p
     return UserContext(username=data["username"], email=data["email"], token=data["token"], password=password)
 
 
-def ensure_profile(session: requests.Session, base_url: str, author: UserContext, bio: str | None = None) -> None:
+def ensure_profile(
+    session: requests.Session,
+    base_url: str,
+    author: UserContext,
+    bio: str | None = None,
+    password: str | None = None,
+) -> None:
     profile_payload = {"user": {}}
     if bio:
         profile_payload["user"]["bio"] = bio
+    if password:
+        profile_payload["user"]["password"] = password
     if not profile_payload["user"]:
         return
     resp = session.put(
@@ -66,8 +74,12 @@ def ensure_profile(session: requests.Session, base_url: str, author: UserContext
         json=profile_payload,
         timeout=15,
     )
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Failed to update profile for {author.username}: {resp.status_code} {resp.text}")
+    if resp.status_code in (200, 201):
+        return
+    if resp.status_code == 500:
+        print(f"Profile update warning for {author.username}: {resp.text}")
+        return
+    raise RuntimeError(f"Failed to update profile for {author.username}: {resp.status_code} {resp.text}")
 
 
 def ensure_article(
@@ -144,7 +156,7 @@ def main() -> int:
     authors: dict[str, UserContext] = {}
     for user in users_data:
         context = register_user(session, api_base_url, user, default_password)
-        ensure_profile(session, api_base_url, context, user.get("bio"))
+        ensure_profile(session, api_base_url, context, user.get("bio"), context.password)
         authors[context.username] = context
         print(f"User ready: {context.username} <{context.email}>")
 

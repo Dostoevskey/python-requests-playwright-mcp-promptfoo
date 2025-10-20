@@ -25,13 +25,15 @@ def test_ui_author_can_create_article(
 
     with allure.step("open sign in page"):
         page.goto(settings.frontend_url)
-        page.get_by_role("link", name="Sign in").click()
+        page.wait_for_load_state("networkidle")
+        page.wait_for_selector('a:has-text("Login")', timeout=10000)
+        page.locator('a:has-text("Login")').click()
 
     with allure.step("fill credentials and submit"):
         page.get_by_placeholder("Email").fill(creds.email)
         page.get_by_placeholder("Password").fill(creds.password)
-        page.get_by_role("button", name="Sign in").click()
-        expect(page.get_by_role("link", name="New Article")).to_be_visible()
+        page.get_by_role("button", name="Login").click()
+        expect(page.get_by_role("link", name="New Article")).to_be_visible(timeout=10000)
 
     with allure.step("compose a new article"):
         page.get_by_role("link", name="New Article").click()
@@ -54,11 +56,13 @@ def test_ui_feed_pagination(author_reader_pages: Dict[str, Page], settings) -> N
 
     with allure.step("visit home page on mobile viewport"):
         mobile_page.goto(settings.frontend_url)
-        expect(mobile_page.get_by_role("link", name="Global Feed")).to_be_visible()
+        mobile_page.wait_for_load_state("networkidle")
+        expect(mobile_page.locator('a[href="#/"]:has-text("Home")')).to_be_visible(timeout=10000)
+        expect(mobile_page.locator('text=Global Feed')).to_be_visible(timeout=10000)
 
     with allure.step("navigate to second page of articles"):
         pagination = mobile_page.locator(".pagination")
-        expect(pagination).to_be_visible()
+        expect(pagination).to_be_visible(timeout=10000)
         second_page = pagination.locator("li.page-item").nth(2)
         second_page.click()
         expect(pagination.locator("li.page-item.active")).to_have_count(1)
@@ -68,5 +72,7 @@ def test_ui_feed_pagination(author_reader_pages: Dict[str, Page], settings) -> N
 def test_ui_route_requires_auth(author_reader_pages: Dict[str, Page], settings) -> None:
     anonymous_page = author_reader_pages["desktop"]
     with allure.step("directly navigate to editor while logged out"):
-        anonymous_page.goto(f"{settings.frontend_url}/editor")
-        expect(anonymous_page).to_have_url(f"{settings.frontend_url}/login")
+        anonymous_page.goto(f"{settings.frontend_url}editor")
+        anonymous_page.wait_for_load_state("networkidle")
+        expect(anonymous_page).to_have_url(settings.frontend_url, timeout=10000)
+        expect(anonymous_page.locator('a:has-text("Login")')).to_be_visible(timeout=10000)

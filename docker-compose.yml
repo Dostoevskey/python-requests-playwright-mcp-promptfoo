@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     volumes:
       - ./demo-app/src:/app
-      - ./config/demo.env:/app/backend/.env:ro
+      - ./demo-app/src/backend/.env:/app/backend/.env:ro
     environment:
       NODE_ENV: development
     command: >-
@@ -46,6 +46,7 @@ services:
       - ./demo-app/src:/app
     environment:
       NODE_ENV: development
+      VITE_BACKEND_URL: http://conduit_backend:3001
     command: >-
       bash -lc "npm install && npm run dev -w frontend -- --host 0.0.0.0 --port 3000"
     ports:

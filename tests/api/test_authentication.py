@@ -25,5 +25,5 @@ def test_user_profile_update(api_client: ApiClient) -> None:
     api_client.register_user(creds)
 
     with allure.step("update user profile bio"):
-        response = api_client.update_profile(creds, bio="Automation enthusiast")
+        response = api_client.update_profile(creds, bio="Automation enthusiast", password=creds.password)
         assert response["user"]["bio"] == "Automation enthusiast"
