@@ -1,0 +1,77 @@
+description: NLQ generation helper
+prompts: prompt.txt
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.2
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.2
+
+defaultTest:
+  assertions:
+    - type: javascript
+      value: |
+        const text = output.trim();
+        if (text.split(/[.!?]/).filter(Boolean).length !== 1) {
+          throw new Error('Output must be a single sentence.');
+        }
+        if (!/\b(\w+\.)?\w{3,}\b/.test(text)) {
+          throw new Error('Sentence appears too short.');
+        }
+
+tests:
+  - description: Generate question using users and jobs tables
+    vars:
+      table_defs: |
+        CREATE TABLE users (
+          id SERIAL PRIMARY KEY,
+          created TIMESTAMP NOT NULL,
+          updated TIMESTAMP NOT NULL,
+          authed BOOLEAN NOT NULL,
+          plan TEXT NOT NULL,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL
+        );
+
+        CREATE TABLE jobs (
+          id SERIAL PRIMARY KEY,
+          created TIMESTAMP NOT NULL,
+          updated TIMESTAMP NOT NULL,
+          parentUserId INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          status TEXT NOT NULL,
+          totalDurationMS BIGINT NOT NULL
+        );
+      rules: |
+        - Mention the table names explicitly (users or jobs).
+        - Limit to a single sentence and request at most 10 rows.
+        - Ask about job counts grouped by status.
+    assert:
+      - type: contains-any
+        value: [users, jobs]
+      - type: regex
+        value: "10"
+  - description: Generate question for invoices table
+    vars:
+      table_defs: |
+        CREATE TABLE invoices (
+          id SERIAL PRIMARY KEY,
+          issued_on TIMESTAMP NOT NULL,
+          total NUMERIC(12,2) NOT NULL,
+          status TEXT NOT NULL
+        );
+      rules: |
+        - Include a timeframe of 90 days.
+        - Mention the invoices table by name.
+        - Ask for the sum of totals grouped by status.
+    assert:
+      - type: contains-all
+        value: [invoices, status]
+      - type: regex
+        value: "90"

@@ -2,11 +2,14 @@
   "name": "python-requests-playwright-mcp-promptfoo",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
-    "promptfoo:test": "promptfoo eval --config config/promptfoo.yaml",
-    "promptfoo:test:watch": "promptfoo eval --config config/promptfoo.yaml --watch"
+    "promptfoo:test": "promptfoo eval --config promptfoo/suites/articles/promptfooconfig.yaml",
+    "promptfoo:test:watch": "promptfoo eval --config promptfoo/suites/articles/promptfooconfig.yaml --watch",
+    "mcp": "playwright-mcp"
   },
   "devDependencies": {
+    "playwright-mcp": "^0.0.12",
     "promptfoo": "^0.118.17"
   }
 }

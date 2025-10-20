@@ -10,12 +10,11 @@ playwright-report/
 .promptfoo/
 .demo-app-cache/
 .demo-seeded/
-demo-app/src/
-demo-app/node_modules/
-demo-app/dist/
+demo-app/src/node_modules/
+demo-app/src/backend/node_modules/
+demo-app/src/frontend/node_modules/
 demo-app/.postgres-data/
 promptfoo/.promptfoo-cache/
-promptfoo/source/
 .idea/
 .vscode/
 .DS_Store

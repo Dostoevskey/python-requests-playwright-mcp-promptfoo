@@ -3,26 +3,28 @@
 Automation workspace that provisions the Conduit RealWorld demo app, seeds deterministic data, and runs API, UI, and LLM prompt validation entirely on local infrastructure.
 
 ## Features
-- Automated bootstrap script clones the demo app, configures PostgreSQL, and applies migrations.
+- Bundled Conduit RealWorld demo app with a bootstrap script that installs dependencies and runs migrations without additional git clones.
 - Deterministic seed data creates five users and ten articles through the public API.
 - Health guardrails verify frontend, backend, and database readiness before pytest executes.
 - Pytest suites cover REST CRUD operations, authentication, pagination, and Playwright UI flows with multi-context support (desktop + mobile).
 - Allure reporting baked into every run with attachments for API responses, Playwright traces, and LLM outputs.
 - Prompt evaluation harness built on Ollama + Promptfoo with small local models (`gemma3:4b`, `deepseek-r1:8b`) and judge validation via `gpt-oss:20b`.
+- Bundled prompt suites derived from `llm-prompt-testing-quick-start`, each with its own configuration for independent evaluation.
 - GitHub Actions CI pipeline validates the API, UI, and LLM suites and archives Allure bundles for every push/PR.
+- Optional Playwright MCP server integration for interactive locator capture from the same workspace.
 
 ## Project Layout
 ```
 .
 ├── config/               # Environment, seed, and promptfoo configs
-├── demo-app/             # RealWorld app clone target (ignored by git)
+├── demo-app/             # Vendored RealWorld example app (frontend + backend sources)
 ├── scripts/              # Bootstrap, seeding, and health utilities
 ├── src/                  # Shared helpers (API client, health, ollama)
 ├── tests/
 │   ├── api/              # Requests-based API coverage
 │   ├── ui/               # Playwright MCP multi-context UI coverage
 │   └── llm/              # Promptfoo + Ollama integration tests
-├── promptfoo/            # Prompt templates and reference repo snapshot
+├── promptfoo/            # Offline prompt suites and shared templates
 ├── docker-compose.yml    # Optional container stack for postgres/backend/frontend
 ├── Makefile              # Friendly entry points
 ├── pyproject.toml        # Python dependencies + pytest config
@@ -57,11 +59,11 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 
 3. **Provision the RealWorld demo app**
    ```bash
-   make demo:setup        # Clones repo, installs workspaces, writes backend .env, runs migrations
+   make demo:setup        # Installs workspaces, writes backend .env, runs migrations
    make demo:seed         # Populates five users + ten articles through the public API
    ```
 
-   > The `demo-app/src` directory is ignored by git so you can safely re-run or reset using `make demo:reset`.
+   > The RealWorld frontend + backend sources ship with this repository. `make demo:reset` simply removes workspace `node_modules` before reinstalling.
 
 4. **Launch the stack**
    - **With Docker Compose**
@@ -75,9 +77,11 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
      ```
 
 5. **Run readiness checks**
-   ```bash
-   make check:health
-   ```
+ ```bash
+ make check:health
+ ```
+
+> After the first `pip`/`npm` install, no additional GitHub clones are required—the RealWorld app and prompt suites are fully vendored in this repository so the entire test stack can run offline.
 
 ## Test Suites
 
@@ -102,24 +106,40 @@ make report         # opens Allure dashboard in a browser
 ## Prompt Evaluation
 
 ### Promptfoo Workflow
-`config/promptfoo.yaml` defines three article-drafting scenarios targeting `gemma3:4b` and `deepseek-r1:8b`. Every scenario enforces:
-- 300–500 character output length (JavaScript assertion).
-- LLM rubric validation using `gpt-oss:20b` to guard against hallucinations and off-topic responses.
-
-Run the suite:
+Each prompt suite lives under `promptfoo/suites/<name>`. They are adapted from the `llm-prompt-testing-quick-start` repository and reworked to run entirely on local Ollama models. Evaluate the bundled article writer suite with:
 ```bash
 make promptfoo
 # or watch mode
 make promptfoo-watch
 ```
 
+Available suites:
+
+- `articles` – structured article drafting with rubric enforcement.
+- `is_nlq_agent_prompt` – JSON scoring of NLQ questions.
+- `is_nlq_minimal_agent_prompt` – lightweight yes/no validation.
+- `nlq_to_sql` – SQL synthesis with aggregate queries.
+- `nlq_to_sql_experiment` – JOIN-focused SQL prompts.
+- `try_this_nlq_agent_prompt` – natural language question generation with row limits.
+
+You can run an individual suite with `npx promptfoo eval --config promptfoo/suites/<suite>/promptfooconfig.yaml`.
+
 ### Pytest + Ollama
-`tests/llm/test_article_generation.py` reads prompt templates from `promptfoo/prompts/articles.yaml`, renders them with Jinja2, and uses `OllamaRunner` to:
+`tests/llm/test_article_generation.py` reads prompt templates from `promptfoo/prompts/articles.yaml`, renders them with Jinja2, and uses `OllamaRunner`/`gpt-oss:20b` to:
 1. Generate content with each lightweight model.
 2. Ensure character-length compliance.
 3. Ask `gpt-oss:20b` to adjudicate coherence and topical accuracy.
 
 Outputs, prompts, and judge decisions are attached to Allure for traceability.
+
+### Playwright MCP (Optional)
+Launch the MCP helper to capture DOM snippets and selectors while the RealWorld frontend is running:
+
+```bash
+npm run mcp -- --url http://localhost:3000/#/
+```
+
+The server exposes Model Context Protocol commands that tools like Cursor or Claude can consume to generate Playwright flows. See the in-terminal instructions for details.
 
 ## Setup Notes
 - The repository intentionally ignores `demo-app/src/` and `promptfoo/source/` so you can freely update upstream projects without polluting Git history.
@@ -134,7 +154,7 @@ Outputs, prompts, and judge decisions are attached to Allure for traceability.
 - **Allure CLI unavailable** – install globally or use Docker (`docker run -p 4040:4040 -v $PWD/allure-results:/app/results frankescobar/allure-docker-service`).
 - **GitHub Actions failures** – review `.github/workflows/ci.yml` to replay `npm install`, `python scripts/health_check.py`, `python scripts/seed_demo_data.py`, and `python -m pytest` locally, then inspect uploaded Allure artifacts from the workflow run.
 
-## Next Steps
-- Wire this project into CI by reusing `make install` + health checks before running targeted suites.
-- Extend API and UI fixtures with data builders for more complex CRUD scenarios (comments, tags, favorites).
-- Add synthetic monitoring jobs that run the health script on a schedule to catch environment regressions early.
+## Known Gaps & Future Enhancements
+- The bundled Ollama models can still produce unstable text; adding deterministic mock providers would make CI faster and more predictable.
+- PostgreSQL migrations currently run synchronously via `npm run sqlz`; packaging a SQLite-backed demo would remove the Docker requirement for quick smoke tests.
+- UI tests rely on the real browser; introducing visual regression snapshots or contract tests for the MCP output would broaden coverage.

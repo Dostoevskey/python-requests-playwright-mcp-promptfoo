@@ -1,0 +1,54 @@
+description: Minimal NLQ guardrail
+prompts: prompt.txt
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0
+
+defaultTest:
+  assertions:
+    - type: is-json
+      value:
+        required: [ok, reason]
+        properties:
+          ok:
+            type: boolean
+          reason:
+            type: string
+    - type: javascript
+      value: |
+        const data = JSON.parse(output);
+        if (data.reason.length > 40) {
+          throw new Error('reason should be short (<= 40 chars)');
+        }
+
+tests:
+  - description: Valid question obeying rules
+    vars:
+      table_defs: |
+        CREATE TABLE orders (
+          id SERIAL PRIMARY KEY,
+          created_at TIMESTAMP NOT NULL,
+          customer_id INTEGER NOT NULL,
+          total NUMERIC(10,2) NOT NULL
+        );
+      question: "What is the average order total per customer in the past 30 days?"
+  - description: Invalid question missing aggregation
+    vars:
+      table_defs: |
+        CREATE TABLE orders (
+          id SERIAL PRIMARY KEY,
+          created_at TIMESTAMP NOT NULL,
+          customer_id INTEGER NOT NULL,
+          total NUMERIC(10,2) NOT NULL
+        );
+      question: "List every order"

@@ -30,7 +30,7 @@ class Settings:
     database_dsn: str
     default_password: str
     ollama_base_url: str
-    promptfoo_config: Path
+    promptfoo_configs: list[Path]
 
 
 ENV_OPTION = "--env-file"
@@ -57,7 +57,13 @@ def settings(pytestconfig: pytest.Config) -> Settings:
     if not api_base_url or not frontend_url:
         pytest.exit("API_BASE_URL and FRONTEND_URL must be defined in env file", returncode=1)
 
-    promptfoo_path = Path(os.environ.get("PROMPTFOO_CONFIG", "config/promptfoo.yaml"))
+    promptfoo_override = os.environ.get("PROMPTFOO_CONFIG")
+    if promptfoo_override:
+        prompt_paths = [Path(part.strip()) for part in promptfoo_override.split(",") if part.strip()]
+    else:
+        prompt_paths = sorted(Path("promptfoo/suites").glob("*/promptfooconfig.yaml"))
+    if not prompt_paths:
+        pytest.exit("No promptfoo configurations found; ensure promptfoo/suites/*/promptfooconfig.yaml exists", returncode=1)
 
     settings_obj = Settings(
         env_file=env_path,
@@ -68,13 +74,17 @@ def settings(pytestconfig: pytest.Config) -> Settings:
         database_dsn=os.environ.get("DATABASE_URL", build_postgres_dsn()),
         default_password=os.environ.get("DEFAULT_PASSWORD", "Password123!"),
         ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
-        promptfoo_config=promptfoo_path,
+        promptfoo_configs=prompt_paths,
     )
 
-    serializable = {
-        key: (str(value) if isinstance(value, Path) else value)
-        for key, value in settings_obj.__dict__.items()
-    }
+    serializable: dict[str, object] = {}
+    for key, value in settings_obj.__dict__.items():
+        if isinstance(value, Path):
+            serializable[key] = str(value)
+        elif isinstance(value, list):
+            serializable[key] = [str(item) if isinstance(item, Path) else item for item in value]
+        else:
+            serializable[key] = value
 
     allure.attach(
         json.dumps(serializable, indent=2),

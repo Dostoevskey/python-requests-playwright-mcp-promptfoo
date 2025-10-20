@@ -1,0 +1,62 @@
+description: NLQ to SQL conversion
+prompts: prompt.txt
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0
+
+defaultTest:
+  assertions:
+    - type: javascript
+      value: |
+        const sql = output.trim();
+        if (!/^select/i.test(sql)) {
+          throw new Error('SQL must start with SELECT');
+        }
+        if (!sql.endsWith(';')) {
+          throw new Error('SQL should end with a semicolon');
+        }
+    - type: regex
+      value: "FROM"
+
+tests:
+  - description: Count paid invoices last month
+    vars:
+      table_defs: |
+        CREATE TABLE invoices (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL,
+          total NUMERIC(10,2) NOT NULL,
+          status TEXT NOT NULL,
+          issued_at TIMESTAMP NOT NULL
+        );
+      question: "How many invoices were paid in the last 30 days?"
+    assert:
+      - type: regex
+        value: "status"
+      - type: regex
+        value: "COUNT"
+  - description: Average session duration by plan
+    vars:
+      table_defs: |
+        CREATE TABLE sessions (
+          id SERIAL PRIMARY KEY,
+          plan TEXT NOT NULL,
+          started_at TIMESTAMP NOT NULL,
+          duration_minutes INTEGER NOT NULL
+        );
+      question: "Return the average session duration per plan for the previous quarter."
+    assert:
+      - type: regex
+        value: "GROUP BY"
+      - type: regex
+        value: "AVG"

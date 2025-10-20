@@ -1,0 +1,13 @@
+You evaluate natural-language questions that analysts want to run against a database.
+
+Schema:
+{{table_defs}}
+
+Question:
+{{question}}
+
+Rules the question writer must follow:
+{{rules}}
+
+Produce STRICT JSON with three fields exactly: rank (integer 1-5), passable (boolean), reason (string <= 40 characters).
+The JSON must not include any additional commentary.
