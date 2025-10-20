@@ -9,6 +9,7 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 - Pytest suites cover REST CRUD operations, authentication, pagination, and Playwright UI flows with multi-context support (desktop + mobile).
 - Allure reporting baked into every run with attachments for API responses, Playwright traces, and LLM outputs.
 - Prompt evaluation harness built on Ollama + Promptfoo with small local models (`gemma3:4b`, `deepseek-r1:8b`) and judge validation via `gpt-oss:20b`.
+- GitHub Actions CI pipeline validates the API, UI, and LLM suites and archives Allure bundles for every push/PR.
 
 ## Project Layout
 ```
@@ -131,6 +132,7 @@ Outputs, prompts, and judge decisions are attached to Allure for traceability.
 - **Promptfoo CLI not found** – run `npm install` to place `promptfoo` in `node_modules/.bin`, or invoke via `npx promptfoo`.
 - **Playwright browsers missing** – after `pip install`, run `python -m playwright install --with-deps chromium`.
 - **Allure CLI unavailable** – install globally or use Docker (`docker run -p 4040:4040 -v $PWD/allure-results:/app/results frankescobar/allure-docker-service`).
+- **GitHub Actions failures** – review `.github/workflows/ci.yml` to replay `npm install`, `python scripts/health_check.py`, `python scripts/seed_demo_data.py`, and `python -m pytest` locally, then inspect uploaded Allure artifacts from the workflow run.
 
 ## Next Steps
 - Wire this project into CI by reusing `make install` + health checks before running targeted suites.
