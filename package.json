@@ -1,0 +1,12 @@
+{
+  "name": "python-requests-playwright-mcp-promptfoo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "promptfoo:test": "promptfoo eval --config config/promptfoo.yaml",
+    "promptfoo:test:watch": "promptfoo eval --config config/promptfoo.yaml --watch"
+  },
+  "devDependencies": {
+    "promptfoo": "^0.38.0"
+  }
+}

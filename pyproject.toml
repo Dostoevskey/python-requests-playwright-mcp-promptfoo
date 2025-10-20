@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-requests-playwright-mcp-promptfoo"
+version = "0.1.0"
+description = "Local test automation stack with API, UI, and LLM prompt validation."
+requires-python = ">=3.10"
+dependencies = [
+  "pytest>=7.4.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-playwright>=0.4.0",
+  "requests>=2.31.0",
+  "httpx>=0.25.0",
+  "pydantic>=2.5.0",
+  "python-dotenv>=1.0.0",
+  "sqlalchemy>=2.0.19",
+  "psycopg2-binary>=2.9.8",
+  "allure-pytest>=2.13.1",
+  "ollama>=0.1.7",
+  "pyyaml>=6.0.1",
+  "jinja2>=3.1.2",
+  "rich>=13.7.0",
+  "typer>=0.9.0"
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --alluredir=allure-results"
+testpaths = [
+  "tests"
+]
+markers = [
+  "ui: marks UI tests that require Playwright browser",
+  "api: marks API tests for the Conduit backend",
+  "llm: marks prompt evaluation tests backed by Ollama"
+]

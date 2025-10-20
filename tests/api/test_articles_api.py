@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+import allure
+import pytest
+
+from src.utils.api_client import ApiClient, ApiError
+
+
+@pytest.mark.api
+@pytest.mark.parametrize("prefix", ["api_article"])
+def test_article_crud_flow(api_client: ApiClient, prefix: str) -> None:
+    creds = api_client.generate_credentials(prefix=prefix)
+    api_client.register_user(creds)
+
+    with allure.step("create article"):
+        created = api_client.create_article(
+            creds,
+            title="Automation CRUD article",
+            description="Created during API test",
+            body="Initial body",
+            tags=["automation", "pytest"],
+        )["article"]
+        slug = created["slug"]
+        assert created["title"] == "Automation CRUD article"
+
+    with allure.step("update article title and content"):
+        updated = api_client.update_article(
+            creds,
+            slug=slug,
+            title="Automation CRUD article - updated",
+            body="Updated body text",
+        )["article"]
+        assert updated["title"] == "Automation CRUD article - updated"
+
+    with allure.step("delete article"):
+        api_client.delete_article(creds, slug)
+        with pytest.raises(ApiError):
+            api_client.get_article(slug)
