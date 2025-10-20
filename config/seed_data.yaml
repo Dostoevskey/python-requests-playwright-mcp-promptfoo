@@ -1,0 +1,79 @@
+users:
+  - username: alice_writer
+    email: alice@example.com
+    bio: Curious explorer of demo data.
+  - username: bob_builder
+    email: bob@example.com
+    bio: Construction of clean APIs.
+  - username: charlie_chronicler
+    email: charlie@example.com
+    bio: Writes notes on release cadences.
+  - username: dana_dev
+    email: dana@example.com
+    bio: Loves shipping UI polish.
+  - username: eli_editor
+    email: eli@example.com
+    bio: Proofreads every commit message.
+articles:
+  - title: Getting started with the demo stack
+    description: Bootstrap the Conduit stack locally in minutes.
+    body: |
+      Welcome to the demo automation project! This short article walks through
+      cloning the repo, installing dependencies, and running automated verification.
+    author: alice_writer
+  - title: Health checks with confidence
+    description: Guard your pipelines with reliable health checks.
+    body: |
+      APIs, frontends, and databases should be checked before tests run. Our
+      health_check utility exercises each tier, ensuring we fail fast when a
+      service is misbehaving.
+    author: bob_builder
+  - title: CRUD flows for writers
+    description: End to end coverage for article authorship.
+    body: |
+      These tests cover creating an article, updating content, and cleaning up
+      after the run. They illustrate how to chain UI interactions using
+      Playwright.
+    author: charlie_chronicler
+  - title: Pagination sanity
+    description: Stable paginated feeds using seed data.
+    body: |
+      Pagination is validated for the global feed using deterministic article
+      ordering so we can assert on page counts without flake.
+    author: dana_dev
+  - title: Authentication quick reference
+    description: Token handling for API clients.
+    body: |
+      We store helpers that wrap login and token refresh logic, letting tests
+      focus on their assertions instead of repetitive boilerplate.
+    author: eli_editor
+  - title: Drafting with local LLMs
+    description: Use Ollama to draft concise posts.
+    body: |
+      The prompt toolkit spins up gemma and deepseek models locally for rapid
+      iteration. Each run validates consistency with a gpt-oss ensemble.
+    author: alice_writer
+  - title: Observability with Allure
+    description: Generate actionable reports from pytest runs.
+    body: |
+      Every test attaches contextual metadata and API payloads that show up in
+      Allure. Teams can drill into steps, attachments, and analytics.
+    author: bob_builder
+  - title: Prompt evaluation workflow
+    description: Reuse promptfoo scenarios with Python.
+    body: |
+      YAML-driven evaluations keep prompts versioned alongside code, with
+      automated scoring harnessed from pytest markers.
+    author: charlie_chronicler
+  - title: UI locator generation tips
+    description: Efficient DOM scraping inside IDEs.
+    body: |
+      Run Playwright in inspector mode to capture selectors quickly. Our config
+      sets the defaults for Cursor or VS Code.
+    author: dana_dev
+  - title: Continuous quality for LLM content
+    description: Blend deterministic and generative checks.
+    body: |
+      Combine structured tests with prompt evaluation to keep generated copy on
+      message. Leverage gpt-oss:20b to validate logic and reduce hallucinations.
+    author: eli_editor

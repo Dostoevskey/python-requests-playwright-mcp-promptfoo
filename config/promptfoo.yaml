@@ -1,0 +1,73 @@
+description: Local article generation evaluation
+prompts:
+  - id: concise-article
+    label: Concise Article Draft
+    prompt: |
+      You are a concise technical writer.
+      Compose an article between 300 and 500 characters.
+      Topic: {{topic}}
+      Tone: {{tone}}
+      Audience: {{audience}}
+      Provide an opening sentence, one supporting detail, and a closing call to action.
+      Avoid bullet lists, markdown, or external references.
+      Respond only with the article text and do not ask follow-up questions.
+      Ensure the final article is 300 to 500 characters long (inclusive).
+      Write exactly four sentences.
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.7
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.6
+
+variables:
+  topic: ''
+  tone: 'informative'
+  audience: 'automation engineers'
+
+defaultTest:
+  options:
+    maxOutputTokens: 512
+  assertions:
+    - type: javascript
+      value: |
+        const trimmed = output.trim();
+        const len = trimmed.length;
+        if (len < 300 || len > 500) {
+          throw new Error(`Expected 300-500 characters, got ${len}`);
+        }
+    - type: llm-rubric
+      provider:
+        id: ollama:gpt-oss:20b
+        config:
+          baseUrl: "{{env.OLLAMA_BASE_URL}}"
+          options:
+            temperature: 0.2
+      value: |
+        Confirm the article adheres to the requested topic, remains logically consistent,
+        and avoids hallucinated claims. Reply "PASS" if the text is on-topic and factual;
+        otherwise explain the issue and reply "FAIL".
+
+tests:
+  - description: API smoke testing article
+    vars:
+      topic: API smoke testing essentials
+      tone: encouraging
+      audience: new automation engineers
+  - description: Playwright MCP locator strategies article
+    vars:
+      topic: Locator strategies for Playwright MCP sessions
+      tone: informative
+      audience: UI testers using VS Code or Cursor
+  - description: Prompt validation workflow article
+    vars:
+      topic: Validating LLM outputs with promptfoo and Allure
+      tone: pragmatic
+      audience: quality engineers adopting local LLMs
