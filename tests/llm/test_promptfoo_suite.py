@@ -26,61 +26,68 @@ def test_promptfoo_eval(settings, tmp_path: Path) -> None:
     if shutil.which("npx") is None:
         pytest.skip("npx not available; install Node.js to run promptfoo evaluations")
 
+     # Guard: require npx and opt-in to run potentially long LLM prompt evaluations
+    if shutil.which("npx") is None:
+        pytest.skip("npx not available; install Node.js to run promptfoo evaluations")
+
     # Simple opt-in guard to avoid accidental runs
     env_dir = Path(settings.env_file).parent if settings.env_file else Path(".")
     if not (env_dir / PROMPTFOO_OPT_IN_FILE).exists() and not Path(PROMPTFOO_OPT_IN_FILE).exists():
         pytest.skip("Promptfoo evaluation is disabled; create a .enable_promptfoo file to opt in")
 
-    report_path = tmp_path / "promptfoo_report.json"
-    command = [
-        "npx",
-        "promptfoo",
-        "eval",
-        "--config",
-        str(settings.promptfoo_config),
-        "--output",
-        str(report_path),
-    ]
+    # Support multiple promptfoo config paths, falling back to single config
+    config_paths = getattr(settings, "promptfoo_configs", None) or [getattr(settings, "promptfoo_config")]
 
-    try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=PROMPTFOO_TIMEOUT,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        allure.attach(str(exc), name="promptfoo_timeout", attachment_type=allure.attachment_type.TEXT)
-        pytest.fail(f"promptfoo eval timed out after {PROMPTFOO_TIMEOUT}s")
+    for config_path in config_paths:
+        with allure.step(f"promptfoo eval: {config_path}"):
+            report_path = tmp_path / f"promptfoo_report_{config_path.parent.name}.json"
+            command = [
+                "npx",
+                "promptfoo",
+                "eval",
+                "--config",
+                str(config_path),
+                "--output",
+                str(report_path),
+            ]
 
-    # Attach outputs for diagnostics
-    allure.attach(completed.stdout or "<no stdout>", name="promptfoo_stdout", attachment_type=allure.attachment_type.TEXT)
-    allure.attach(completed.stderr or "<no stderr>", name="promptfoo_stderr", attachment_type=allure.attachment_type.TEXT)
+            # Run with timeout to avoid hangs
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=PROMPTFOO_TIMEOUT,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                allure.attach(str(exc), name=f"promptfoo_timeout_{config_path.parent.name}", attachment_type=allure.attachment_type.TEXT)
+                pytest.fail(f"promptfoo eval timed out for {config_path} after {PROMPTFOO_TIMEOUT}s")
 
-    if completed.returncode != 0:
-        pytest.fail(
-            f"promptfoo eval failed with code {completed.returncode}\n\nSTDOUT:\n{completed.stdout}\n\nSTDERR:\n{completed.stderr}"
-        )
+            # Attach stdout/stderr unconditionally for diagnostics
+            allure.attach(completed.stdout or "<no stdout>", name=f"promptfoo_stdout_{config_path.parent.name}", attachment_type=allure.attachment_type.TEXT)
+            allure.attach(completed.stderr or "<no stderr>", name=f"promptfoo_stderr_{config_path.parent.name}", attachment_type=allure.attachment_type.TEXT)
 
-    if not report_path.exists():
-        pytest.fail("promptfoo did not produce the expected report file")
+            if completed.returncode != 0:
+                pytest.fail(f"promptfoo eval failed for {config_path} with code {completed.returncode}\n\nSTDOUT:\n{completed.stdout}\n\nSTDERR:\n{completed.stderr}")
 
-    try:
-        data = json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        # Attach raw to make parsing errors actionable
-        raw = report_path.read_text(encoding="utf-8", errors="replace") if report_path.exists() else "<no file>"
-        allure.attach(raw, name="promptfoo_report_raw", attachment_type=allure.attachment_type.TEXT)
-        pytest.fail(f"Unable to parse promptfoo report: {exc}")
+            if not report_path.exists():
+                pytest.fail(f"promptfoo did not produce the expected report file for {config_path}")
 
-    allure.attach(json.dumps(data, indent=2), name="promptfoo_report", attachment_type=allure.attachment_type.JSON)
+            try:
+                data = json.loads(report_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                raw = report_path.read_text(encoding="utf-8", errors="replace") if report_path.exists() else "<no file>"
+                allure.attach(raw, name=f"promptfoo_report_raw_{config_path.parent.name}", attachment_type=allure.attachment_type.TEXT)
+                pytest.fail(f"Unable to parse promptfoo report for {config_path}: {exc}")
 
-    # Basic failure detection: any prompt with testFailCount or testErrorCount > 0
-    prompts = data.get("results", {}).get("prompts", [])
-    failing = [
-        (prompt.get("label", prompt.get("raw", "<unknown>")), prompt.get("metrics", {}))
-        for prompt in prompts
-        if prompt.get("metrics", {}).get("testFailCount", 0) > 0 or prompt.get("metrics", {}).get("testErrorCount", 0) > 0
-    ]
-    assert not failing, f"Promptfoo reported failures: {failing}"
+            allure.attach(json.dumps(data, indent=2), name=f"promptfoo_report_{config_path.parent.name}", attachment_type=allure.attachment_type.JSON)
+
+            prompts = data.get("results", {}).get("prompts", [])
+            failing = [
+                (prompt.get("label", prompt.get("raw", "<unknown>")), prompt.get("metrics", {}))
+                for prompt in prompts
+                if prompt.get("metrics", {}).get("testFailCount", 0) > 0
+                or prompt.get("metrics", {}).get("testErrorCount", 0) > 0
+            ]
+            assert not failing, f"Promptfoo reported failures for {config_path}: {failing}"
