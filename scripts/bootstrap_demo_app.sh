@@ -45,17 +45,18 @@ fi
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
 
-if [[ ${RESET} -eq 1 ]] && [[ -d "$TARGET_DIR" ]]; then
-  echo "Removing existing demo app at $TARGET_DIR"
-  rm -rf "$TARGET_DIR"
+if [[ ! -d "$TARGET_DIR" ]]; then
+  echo "Bundled demo application not found at $TARGET_DIR" >&2
+  echo "The project now vendors the Conduit RealWorld example app; restore the directory from source control." >&2
+  exit 1
 fi
 
-if [[ ! -d "$TARGET_DIR/.git" ]]; then
-  echo "Cloning Conduit RealWorld demo app..."
-  git clone https://github.com/Dostoevskey/conduit-realworld-example-app "$TARGET_DIR"
-else
-  echo "Demo app already present; fetching latest changes"
-  git -C "$TARGET_DIR" pull --ff-only
+if [[ ${RESET} -eq 1 ]]; then
+  echo "Resetting demo app dependencies"
+  rm -rf \
+    "$TARGET_DIR/node_modules" \
+    "$TARGET_DIR/backend/node_modules" \
+    "$TARGET_DIR/frontend/node_modules"
 fi
 
 if ! command -v npm >/dev/null 2>&1; then

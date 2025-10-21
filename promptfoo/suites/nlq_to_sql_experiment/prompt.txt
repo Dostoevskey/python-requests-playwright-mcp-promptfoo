@@ -1,0 +1,9 @@
+You are a SQL synthesis assistant.
+
+Schema:
+{{table_defs}}
+
+Request: {{question}}
+
+Construct a single SQL query optimised for readability. Use table aliases and include LIMIT {{limit_clause}}.
+Return SQL only without commentary.

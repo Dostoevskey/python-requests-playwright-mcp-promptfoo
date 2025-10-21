@@ -1,0 +1,65 @@
+description: NLQ to SQL experimental prompts
+prompts: prompt.txt
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.1
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.1
+
+defaultTest:
+  assertions:
+    - type: javascript
+      value: |
+        const sql = output.trim();
+        if (!/^select/i.test(sql)) {
+          throw new Error('Expected SELECT statement');
+        }
+        if (!sql.includes('JOIN')) {
+          throw new Error('Expected a JOIN between tables');
+        }
+        if (!sql.includes('LIMIT')) {
+          throw new Error('Expected a LIMIT clause');
+        }
+
+tests:
+  - description: Jobs by customer
+    vars:
+      table_defs: |
+        CREATE TABLE customers (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL
+        );
+
+        CREATE TABLE jobs (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id),
+          status TEXT NOT NULL,
+          total_duration_ms BIGINT NOT NULL,
+          created_at TIMESTAMP NOT NULL
+        );
+      question: "Show the latest successful jobs with the customer name."
+      limit_clause: "20"
+  - description: Sessions with plan information
+    vars:
+      table_defs: |
+        CREATE TABLE plans (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL
+        );
+
+        CREATE TABLE sessions (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER REFERENCES plans(id),
+          started_at TIMESTAMP NOT NULL,
+          duration_minutes INTEGER NOT NULL
+        );
+      question: "Fetch the average duration per plan name for the last quarter."
+      limit_clause: "10"

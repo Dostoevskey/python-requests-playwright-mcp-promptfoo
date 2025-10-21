@@ -1,0 +1,9 @@
+You generate concise natural-language questions for analysts.
+
+Table definitions:
+{{table_defs}}
+
+Constraints:
+{{rules}}
+
+Return a single sentence question that references the appropriate tables and fits the rules.

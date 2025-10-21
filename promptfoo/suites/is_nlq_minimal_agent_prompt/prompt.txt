@@ -1,0 +1,9 @@
+You provide quick yes/no validation for natural-language database queries.
+
+Schema summary:
+{{table_defs}}
+
+Question: {{question}}
+
+Return JSON exactly like {"ok": <true|false>, "reason": "<20 chars>"}.
+Never include additional text or fields.
