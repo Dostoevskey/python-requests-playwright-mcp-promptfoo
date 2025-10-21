@@ -4,10 +4,13 @@ from __future__ import annotations
 import random
 import string
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
+DEFAULT_TIMEOUT = 10  # seconds
 
 @dataclass
 class UserCredentials:
@@ -20,16 +23,28 @@ class UserCredentials:
 class ApiError(RuntimeError):
     """Raised when the API returns an unexpected status code."""
 
+    def __init__(self, message: str, status: Optional[int] = None, body: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.body = body
+
 
 class ApiClient:
-    def __init__(self, base_url: str, session: requests.Session | None = None) -> None:
+    def __init__(self, base_url: str, session: requests.Session | None = None, timeout: int = DEFAULT_TIMEOUT) -> None:
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
         self.session = session or requests.Session()
+        # Configure retries for transient server/network errors
+        retries = Retry(total=3, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), raise_on_status=False)
+        adapter = HTTPAdapter(max_retries=retries)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        # Default headers
         self.session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
 
     def _raise_for_status(self, response: requests.Response, expected: tuple[int, ...]) -> dict[str, Any]:
         if response.status_code not in expected:
-            raise ApiError(f"Unexpected status {response.status_code}: {response.text}")
+            raise ApiError(f"Unexpected status {response.status_code}: {response.text}", status=response.status_code, body=response.text)
         if response.text:
             return response.json()
         return {}
@@ -48,7 +63,7 @@ class ApiClient:
 
     def register_user(self, creds: UserCredentials) -> UserCredentials:
         payload = {"user": {"username": creds.username, "email": creds.email, "password": creds.password}}
-        response = self.session.post(f"{self.base_url}/users", json=payload, timeout=20)
+        response = self.session.post(f"{self.base_url}/users", json=payload, timeout=self.timeout)
         data = self._raise_for_status(response, expected=(200, 201))
         token = data["user"].get("token")
         creds.token = token
@@ -56,7 +71,7 @@ class ApiClient:
 
     def login_user(self, creds: UserCredentials) -> UserCredentials:
         payload = {"user": {"email": creds.email, "password": creds.password}}
-        response = self.session.post(f"{self.base_url}/users/login", json=payload, timeout=20)
+        response = self.session.post(f"{self.base_url}/users/login", json=payload, timeout=self.timeout)
         data = self._raise_for_status(response, expected=(200,))
         creds.token = data["user"].get("token")
         return creds
@@ -68,7 +83,7 @@ class ApiClient:
         image: str | None = None,
         password: str | None = None,
     ) -> dict[str, Any]:
-        headers = {"Authorization": f"Token {creds.token}"}
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
         payload = {"user": {}}
         if bio:
             payload["user"]["bio"] = bio
@@ -76,7 +91,7 @@ class ApiClient:
             payload["user"]["image"] = image
         if password:
             payload["user"]["password"] = password
-        response = self.session.put(f"{self.base_url}/user", headers=headers, json=payload, timeout=20)
+        response = self.session.put(f"{self.base_url}/user", headers=headers, json=payload, timeout=self.timeout)
         return self._raise_for_status(response, expected=(200,))
 
     # Article endpoints --------------------------------------------------
@@ -89,7 +104,7 @@ class ApiClient:
         body: str,
         tags: list[str] | None = None,
     ) -> dict[str, Any]:
-        headers = {"Authorization": f"Token {creds.token}"}
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
         payload = {
             "article": {
                 "title": title,
@@ -98,32 +113,38 @@ class ApiClient:
                 "tagList": tags or [],
             }
         }
-        response = self.session.post(f"{self.base_url}/articles", headers=headers, json=payload, timeout=20)
+        response = self.session.post(f"{self.base_url}/articles", headers=headers, json=payload, timeout=self.timeout)
         return self._raise_for_status(response, expected=(200, 201))
 
     def get_article(self, slug: str) -> dict[str, Any]:
-        response = self.session.get(f"{self.base_url}/articles/{slug}", timeout=20)
+        response = self.session.get(f"{self.base_url}/articles/{slug}", timeout=self.timeout)
         return self._raise_for_status(response, expected=(200,))
 
     def list_articles(self, limit: int = 5, offset: int = 0) -> dict[str, Any]:
         params = {"limit": limit, "offset": offset}
-        response = self.session.get(f"{self.base_url}/articles", params=params, timeout=20)
+        response = self.session.get(f"{self.base_url}/articles", params=params, timeout=self.timeout)
         return self._raise_for_status(response, expected=(200,))
 
     def update_article(self, creds: UserCredentials, slug: str, title: str | None = None, body: str | None = None) -> dict[str, Any]:
-        headers = {"Authorization": f"Token {creds.token}"}
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
         payload: dict[str, Any] = {"article": {}}
         if title:
             payload["article"]["title"] = title
         if body:
             payload["article"]["body"] = body
-        response = self.session.put(f"{self.base_url}/articles/{slug}", headers=headers, json=payload, timeout=20)
+        response = self.session.put(f"{self.base_url}/articles/{slug}", headers=headers, json=payload, timeout=self.timeout)
         return self._raise_for_status(response, expected=(200,))
 
     def delete_article(self, creds: UserCredentials, slug: str) -> None:
-        headers = {"Authorization": f"Token {creds.token}"}
-        response = self.session.delete(f"{self.base_url}/articles/{slug}", headers=headers, timeout=20)
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
+        response = self.session.delete(f"{self.base_url}/articles/{slug}", headers=headers, timeout=self.timeout)
         self._raise_for_status(response, expected=(200, 204))
+
+    def close(self) -> None:
+        try:
+            self.session.close()
+        except Exception:
+            pass
 
 
 __all__ = ["ApiClient", "ApiError", "UserCredentials"]
