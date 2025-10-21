@@ -48,3 +48,27 @@ def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, Bro
                 context.close()
             except Exception:
                 pass
+
+
+@pytest.fixture
+def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> Generator[Dict[str, Page], None, None]:
+    """
+    Create Page objects for each context and navigate to the frontend root.
+    If tests require authenticated author state, extend this fixture to:
+      - create an author via the API (ApiClient)
+      - set the auth token into localStorage for the page context before navigation
+    """
+    pages: Dict[str, Page] = {}
+    try:
+        for name, ctx in multi_context.items():
+            page = ctx.new_page()
+            # Navigate to the app root so pages are ready for test actions
+            page.goto(settings.frontend_url)
+            pages[name] = page
+        yield pages
+    finally:
+        for p in pages.values():
+            try:
+                p.close()
+            except Exception:
+                pass
