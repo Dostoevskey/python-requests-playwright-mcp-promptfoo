@@ -4,20 +4,11 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Any
 
 import allure
 import pytest
 from dotenv import load_dotenv
-
-from src.health.checks import (
-    ReadinessTimeoutError,
-    build_postgres_dsn,
-    ensure_all_ready,
-    wait_for_database,
-    wait_for_http,
-)
-from src.utils.api_client import ApiClient
 
 
 @dataclass
@@ -45,7 +36,37 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-@pytest.fixture(scope="session")
+def _redact(value: Any) -> Any:
+    """Simple redaction helper for Allure attachments.
+    Masks known sensitive keys or values to avoid leaking secrets into test reports.
+    """
+    if isinstance(value, str):
+        lower = value.lower()
+        # naive checks for secrets
+        if "password" in lower or "secret" in lower or "token" in lower or "database" in lower or "dsn" in lower:
+            return "***REDACTED***"
+    return value
+
+
+def _redact_settings(d: dict[str, Any]) -> dict[str, Any]:
+    redacted: dict[str, Any] = {}
+    for k, v in d.items():
+        if k.upper() in ("DATABASE_URL", "DATABASE_DSN", "DEFAULT_PASSWORD", "OLLAMA_API_KEY", "OLLAMA_BASE_URL"):
+            redacted[k] = "***REDACTED***"
+        elif isinstance(v, dict):
+            redacted[k] = _redact_settings(v)
+        else:
+            redacted[k] = _redact(v)
+    return redacted
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "ui: UI tests requiring Playwright")
+    config.addinivalue_line("markers", "api: API contract tests")
+    config.addinivalue_line("markers", "llm: Prompt evaluation tests")
+
+
+@ pytest.fixture(scope="session")
 def settings(pytestconfig: pytest.Config) -> Settings:
     env_path = Path(pytestconfig.getoption(ENV_OPTION))
     if not env_path.exists():
@@ -71,7 +92,7 @@ def settings(pytestconfig: pytest.Config) -> Settings:
         frontend_url=frontend_url,
         backend_health_endpoint=os.environ.get("BACKEND_HEALTH_ENDPOINT", f"{api_base_url}/articles"),
         frontend_health_endpoint=os.environ.get("FRONTEND_HEALTH_ENDPOINT", frontend_url),
-        database_dsn=os.environ.get("DATABASE_URL", build_postgres_dsn()),
+        database_dsn=os.environ.get("DATABASE_URL", ""),
         default_password=os.environ.get("DEFAULT_PASSWORD", "Password123!"),
         ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         promptfoo_configs=prompt_paths,
@@ -86,80 +107,13 @@ def settings(pytestconfig: pytest.Config) -> Settings:
         else:
             serializable[key] = value
 
+    # Redact sensitive fields before attaching
+    redacted = _redact_settings(serializable)
+
     allure.attach(
-        json.dumps(serializable, indent=2),
+        json.dumps(redacted, indent=2),
         name="settings",
         attachment_type=allure.attachment_type.JSON,
     )
 
     return settings_obj
-
-
-@pytest.fixture(scope="session")
-def backend_ready(settings: Settings) -> Iterator[None]:
-    try:
-        status = wait_for_http("backend", settings.backend_health_endpoint)
-    except ReadinessTimeoutError as exc:
-        pytest.skip(f"Backend not ready: {exc}")
-    else:
-        allure.attach(
-            json.dumps(status.__dict__, indent=2),
-            name="backend_health",
-            attachment_type=allure.attachment_type.JSON,
-        )
-    yield
-
-
-@pytest.fixture(scope="session")
-def frontend_ready(settings: Settings) -> Iterator[None]:
-    try:
-        status = wait_for_http("frontend", settings.frontend_health_endpoint)
-    except ReadinessTimeoutError as exc:
-        pytest.skip(f"Frontend not ready: {exc}")
-    else:
-        allure.attach(
-            json.dumps(status.__dict__, indent=2),
-            name="frontend_health",
-            attachment_type=allure.attachment_type.JSON,
-        )
-    yield
-
-
-@pytest.fixture(scope="session")
-def database_ready(settings: Settings) -> Iterator[None]:
-    try:
-        status = wait_for_database("database", settings.database_dsn)
-    except ReadinessTimeoutError as exc:
-        pytest.skip(f"Database not ready: {exc}")
-    else:
-        allure.attach(
-            json.dumps(status.__dict__, indent=2),
-            name="database_health",
-            attachment_type=allure.attachment_type.JSON,
-        )
-    yield
-
-
-@pytest.fixture(scope="session")
-def api_client(settings: Settings, backend_ready: None) -> ApiClient:  # noqa: D401
-    """API client pointing at the Conduit backend."""
-    return ApiClient(settings.api_base_url)
-
-
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if not config.getoption("-m"):
-        return
-    # enforce marker usage is known
-    markers = {"api", "ui", "llm"}
-    for item in items:
-        for mark in item.iter_markers():
-            if mark.name in markers:
-                break
-        else:
-            continue
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers", "ui: UI tests requiring Playwright")
-    config.addinivalue_line("markers", "api: API contract tests")
-    config.addinivalue_line("markers", "llm: Prompt evaluation tests")
