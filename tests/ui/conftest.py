@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Generator
 
 import pytest
-from playwright.sync_api import Browser, BrowserContext, Page, devices
+from playwright.sync_api import Browser, BrowserContext, Page
 from pathlib import Path
 
 
@@ -11,12 +11,21 @@ from pathlib import Path
 def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, BrowserContext], None, None]:
     """
     Provide two contexts (desktop + mobile) for multi-context UI tests.
-    Use Playwright device descriptors for more accurate mobile emulation
-    and per-run directories for video artifacts.
+    Use an explicit mobile options dict to avoid importing `devices` from Playwright,
+    and place video artifacts in per-run temp dirs.
     """
     contexts: Dict[str, BrowserContext] = {}
     videos_dir = tmp_path_factory.mktemp("playwright_videos")
     videos_mobile = tmp_path_factory.mktemp("playwright_videos_mobile")
+
+    # Minimal mobile emulation options (sufficient for most responsive UI tests)
+    mobile_opts = {
+        "viewport": {"width": 414, "height": 896},
+        "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
+        "device_scale_factor": 3,
+        "is_mobile": True,
+        "has_touch": True,
+    }
 
     try:
         contexts["desktop"] = browser.new_context(
@@ -24,11 +33,13 @@ def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, Bro
             record_video_dir=str(videos_dir),
         )
         contexts["desktop"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
+
         contexts["mobile"] = browser.new_context(
-            **devices["iPhone 12"],
+            **mobile_opts,
             record_video_dir=str(videos_mobile),
         )
         contexts["mobile"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
+
         yield contexts
     finally:
         # Ensure contexts are closed even if tests fail
@@ -37,4 +48,3 @@ def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, Bro
                 context.close()
             except Exception:
                 pass
-
