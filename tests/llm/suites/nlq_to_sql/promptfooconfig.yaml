@@ -1,0 +1,43 @@
+description: Generate SQL for simple sales analytics questions
+prompts:
+  - id: nlq_to_sql
+    label: NLQ to SQL generator
+    raw: |
+      You convert natural language analytics questions into SQL for a Postgres database.
+      Use the tables: orders(order_id, customer_id, total, created_at), customers(customer_id, region).
+      Respond ONLY with SQL.
+      Question: {{question}}
+
+providers:
+  - id: ollama:gemma3:4b
+    label: gemma3-4b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0.1
+        num_predict: 160
+
+tests:
+  - description: Aggregate totals by region
+    vars:
+      question: "Show total revenue by region for the last 30 days."
+    assertions:
+      - type: regex
+        value: "SELECT\\s+customers\\.region"
+      - type: regex
+        value: "GROUP BY"
+  - description: Filtered count of orders
+    vars:
+      question: "How many orders were placed by customers in the west region this month?"
+    assertions:
+      - type: regex
+        value: "COUNT\\(\\*\\)"
+      - type: regex
+        value: "WHERE\\s+customers\\.region"
+
+defaultTest:
+  assertions:
+    - type: regex
+      value: "SELECT"
+    - type: regex
+      value: ";$"
