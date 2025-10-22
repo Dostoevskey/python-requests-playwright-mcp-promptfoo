@@ -33,7 +33,8 @@ class OllamaRunner:
         self._chat_models = {"deepseek-r1:8b"}
 
     def ensure_model(self, model: str) -> bool:
-        if self.use_fake:
+        # Re-check env each call in case workers set it late
+        if self.use_fake or os.environ.get("USE_FAKE_OLLAMA", _default_fake_flag()).lower() in {"1", "true", "yes"}:
             return True
         try:
             self.client.show(model=model)
@@ -42,7 +43,8 @@ class OllamaRunner:
             return False
 
     def generate(self, model: str, prompt: str, options: dict[str, Any] | None = None) -> OllamaModelResult:
-        if self.use_fake:
+        # Re-check env each call for resilience with xdist / env propagation
+        if self.use_fake or os.environ.get("USE_FAKE_OLLAMA", _default_fake_flag()).lower() in {"1", "true", "yes"}:
             return self._fake_response(model, prompt)
         try:
             if model in self._chat_models:
@@ -53,11 +55,20 @@ class OllamaRunner:
                     messages=[{"role": "user", "content": prompt}],
                     options=chat_options or None,
                 )
-                output = chat_response.message.content or ""
-                tokens: dict[str, Any] = {
-                    "prompt": getattr(chat_response, "prompt_eval_count", None),
-                    "completion": getattr(chat_response, "eval_count", None),
-                }
+                # Support both dict and object response shapes
+                if isinstance(chat_response, dict):
+                    message = chat_response.get("message") or {}
+                    output = (message.get("content") or "").strip()
+                    tokens: dict[str, Any] = {
+                        "prompt": chat_response.get("prompt_eval_count"),
+                        "completion": chat_response.get("eval_count"),
+                    }
+                else:
+                    output = getattr(getattr(chat_response, "message", None), "content", "") or ""
+                    tokens = {
+                        "prompt": getattr(chat_response, "prompt_eval_count", None),
+                        "completion": getattr(chat_response, "eval_count", None),
+                    }
             else:
                 response = self.client.generate(model=model, prompt=prompt, options=options or {})
                 output = response.get("response", "")
@@ -70,7 +81,7 @@ class OllamaRunner:
         return OllamaModelResult(model=model, output=output, tokens=tokens)
 
     def evaluate_with_judge(self, judge_model: str, article: str, topic: str) -> tuple[bool, str]:
-        if self.use_fake:
+        if self.use_fake or os.environ.get("USE_FAKE_OLLAMA", _default_fake_flag()).lower() in {"1", "true", "yes"}:
             digest = hashlib.md5(f"{judge_model}:{topic}".encode()).hexdigest()
             return True, f"PASS stub-{digest[:6]}"
         prompt = (

@@ -78,6 +78,12 @@ if [[ "$DB_DIALECT" == "sqlite" ]]; then
     DB_STORAGE_PATH="$ROOT_DIR/${DB_STORAGE_PATH#./}"
   fi
   mkdir -p "$(dirname "$DB_STORAGE_PATH")"
+
+  # Ensure sqlite3 driver is available for Sequelize when using sqlite dialect
+  if ! npm -w backend ls sqlite3 >/dev/null 2>&1; then
+    echo "Installing sqlite3 driver for Sequelize (sqlite dialect)"
+    npm -w backend install sqlite3 --no-fund --prefer-offline
+  fi
 fi
 
 cat <<ENV > backend/.env
