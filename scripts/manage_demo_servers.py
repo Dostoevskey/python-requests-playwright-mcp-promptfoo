@@ -36,6 +36,7 @@ class ServerProcess:
     env: dict[str, str]
     log_path: Path
     health_url: str
+    cwd: Path
 
 
 def read_state() -> Dict[str, Any]:
@@ -63,7 +64,7 @@ def start_server(proc: ServerProcess, logger) -> int:
     logger.info("Starting %s with command: %s", proc.name, " ".join(proc.command))
     process = subprocess.Popen(
         proc.command,
-        cwd=DEMO_SRC_DIR,
+        cwd=proc.cwd,
         env=proc.env,
         stdout=log_file,
         stderr=subprocess.STDOUT,
@@ -125,20 +126,25 @@ def start(env_file: Path, timeout: float) -> None:
 
     logger.debug("Using backend port %s and frontend port %s", api_port, frontend_port)
 
+    backend_cwd = DEMO_SRC_DIR / "backend"
+    frontend_cwd = DEMO_SRC_DIR  # vite runs from workspace root
+
     processes = [
         ServerProcess(
             name="backend",
-            command=["npm", "run", "dev", "-w", "backend"],
+            command=["node", "index.js"],
             env=backend_env,
             log_path=LOG_DIR / "backend-dev.log",
             health_url=os.getenv("BACKEND_HEALTH_ENDPOINT", f"http://localhost:{api_port}/api/articles"),
+            cwd=backend_cwd,
         ),
         ServerProcess(
             name="frontend",
             command=["npm", "run", "dev", "-w", "frontend"],
-            env=frontend_env,
+            env={**frontend_env, "VITE_BACKEND_URL": f"http://localhost:{api_port}"},
             log_path=LOG_DIR / "frontend-dev.log",
             health_url=os.getenv("FRONTEND_HEALTH_ENDPOINT", f"http://localhost:{frontend_port}/#/"),
+            cwd=frontend_cwd,
         ),
     ]
 
