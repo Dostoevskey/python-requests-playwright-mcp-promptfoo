@@ -32,6 +32,13 @@ compose\:up:
 compose\:down:
 	docker compose down
 
+clean:
+	@echo "==> Cleaning up Docker resources and database state"
+	docker compose down -v
+	docker volume rm python-requests-playwright-mcp-promptfoo_postgres-data 2>/dev/null || true
+	rm -rf allure-results logs/*.json artifacts/playwright_screenshots 2>/dev/null || true
+	@echo "✓ Clean complete"
+
 lint:
 	$(PYTEST) --collect-only
 
@@ -70,7 +77,6 @@ DemoSeed: demo\:seed
 demo\:seed:
 	docker compose up -d postgres demo-backend demo-frontend
 	$(PYTHON) scripts/health_check.py --env-file config/demo.env
-	sleep 3
 	$(PYTHON) scripts/seed_demo_data.py --env-file config/demo.env
 
 logs\:clean:
@@ -81,7 +87,6 @@ test\:api:
 		docker compose up -d postgres demo-backend demo-frontend; \
 		trap "docker compose down" EXIT; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 3; \
 		$(PYTHON) scripts/seed_demo_data.py --env-file "$(ENV_FILE)"; \
 		PYTHONPATH=. $(PYTEST) -m api'
 
@@ -90,7 +95,6 @@ test\:ui:
 		docker compose up -d postgres demo-backend demo-frontend; \
 		trap "docker compose down" EXIT; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 3; \
 		$(PYTHON) scripts/seed_demo_data.py --env-file "$(ENV_FILE)"; \
 		PYTHONPATH=. $(PYTEST) -m ui --headed'
 
@@ -99,7 +103,6 @@ test\:smoke:
 		docker compose up -d postgres demo-backend demo-frontend; \
 		trap "docker compose down" EXIT; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 2; \
 		PYTHONPATH=. $(PYTEST) -m smoke --maxfail=1 --alluredir=allure-results --clean-alluredir'
 
 test\:llm:
@@ -107,7 +110,6 @@ test\:llm:
 		docker compose up -d postgres demo-backend demo-frontend; \
 		trap "docker compose down" EXIT; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 3; \
 		$(PYTHON) scripts/seed_demo_data.py --env-file "$(ENV_FILE)"; \
 		PYTHONPATH=. $(PYTEST) -m llm'
 
@@ -116,7 +118,6 @@ test\:llm\:audit:
 		docker compose up -d postgres demo-backend demo-frontend; \
 		trap "docker compose down" EXIT; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 3; \
 		$(PYTHON) scripts/seed_demo_data.py --env-file "$(ENV_FILE)"; \
 		echo ""; \
 		echo "⚠️  STRICT QUALITY AUDIT MODE ⚠️"; \
@@ -144,7 +145,6 @@ test:
 		echo "==> Spinning up demo stack"; \
 		docker compose up -d postgres demo-backend demo-frontend; \
 		$(PYTHON) scripts/health_check.py --env-file "$(ENV_FILE)"; \
-		sleep 3; \
 		$(PYTHON) scripts/seed_demo_data.py --env-file "$(ENV_FILE)"; \
 		setup_end=$$(date +%s); \
 		SETUP_TIME=$$((setup_end - start_ts)); \
@@ -192,4 +192,4 @@ test:
 report:
 	allure serve allure-results
 
-.PHONY: install compose\:up compose\:down lint check\:health promptfoo promptfoo-watch promptfoo-view mcp demo\:setup demo\:lite demo\:seed demo\:servers\:start demo\:servers\:stop demo\:servers\:status logs\:clean test\:api test\:ui test\:smoke test\:llm test\:llm\:audit test report
+.PHONY: install compose\:up compose\:down clean lint check\:health promptfoo promptfoo-watch promptfoo-view mcp demo\:setup demo\:lite demo\:seed demo\:servers\:start demo\:servers\:stop demo\:servers\:status logs\:clean test\:api test\:ui test\:smoke test\:llm test\:llm\:audit test report
