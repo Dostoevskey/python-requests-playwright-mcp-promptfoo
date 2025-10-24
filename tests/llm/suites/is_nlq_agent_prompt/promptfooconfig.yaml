@@ -1,0 +1,50 @@
+description: Classify natural-language questions for NLQ agent suitability
+prompts:
+  - id: is_nlq_classifier
+    label: NLQ agent classifier
+    raw: |
+      You are an assistant that determines if a question should be routed to an NLQ agent.
+      Answer with JSON: {"is_nlq": true|false, "reason": string}.
+      Question: {{question}}
+
+providers:
+  - id: ollama:deepseek-r1:8b
+    label: deepseek-r1-8b
+    config:
+      baseUrl: "{{env.OLLAMA_BASE_URL}}"
+      options:
+        temperature: 0
+        num_predict: 120
+
+tests:
+  - description: Aggregation question suitable for NLQ
+    vars:
+      question: "What is the average MRR by region for the last quarter?"
+    assertions:
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          if (data.is_nlq !== true) {
+            throw new Error('Expected NLQ routing for analytics question');
+          }
+  - description: Non-analytical chit-chat should not be routed
+    vars:
+      question: "Tell me a joke about databases."
+    assertions:
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          if (data.is_nlq !== false) {
+            throw new Error('Expected non-NLQ routing for casual request');
+          }
+
+defaultTest:
+  assertions:
+    - type: regex
+      value: "^{\\\"is_nlq\\\": (true|false), \\\"reason\\\": \\\".+\\\"}$"
+    - type: javascript
+      value: |
+        const data = JSON.parse(output);
+        if (typeof data.reason !== 'string' || data.reason.trim().length < 8) {
+          throw new Error('Expected informative reason string');
+        }

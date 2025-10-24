@@ -3,44 +3,48 @@
 Automation workspace that provisions the Conduit RealWorld demo app, seeds deterministic data, and runs API, UI, and LLM prompt validation entirely on local infrastructure.
 
 ## Features
-- Bundled Conduit RealWorld demo app with a bootstrap script that installs dependencies and runs migrations without additional git clones.
+- Bundled RealWorld frontend + backend so setup works entirely offline (no extra git clones).
 - Deterministic seed data creates five users and ten articles through the public API.
 - Health guardrails verify frontend, backend, and database readiness before pytest executes.
 - Pytest suites cover REST CRUD operations, authentication, pagination, and Playwright UI flows with multi-context support (desktop + mobile).
 - Allure reporting baked into every run with attachments for API responses, Playwright traces, and LLM outputs.
-- Prompt evaluation harness built on Ollama + Promptfoo with small local models (`gemma3:4b`, `deepseek-r1:8b`) and judge validation via `gpt-oss:20b`.
-- Bundled prompt suites derived from `llm-prompt-testing-quick-start`, each with its own configuration for independent evaluation.
+- Prompt evaluation harness built on Ollama + Promptfoo with small local models (`gemma3:4b`, `deepseek-r1:8b`) and judge validation via `gpt-oss:20b`).
 - GitHub Actions CI pipeline validates the API, UI, and LLM suites and archives Allure bundles for every push/PR.
-- Optional Playwright MCP server integration for interactive locator capture from the same workspace.
+- Optional Playwright MCP server integration for interactive locator capture (see `docs/playwright-mcp-notes.md`).
 
 ## Project Layout
 ```
 .
 ├── config/               # Environment, seed, and promptfoo configs
-├── demo-app/             # Vendored RealWorld example app (frontend + backend sources)
+├── demo-app/             # Vendored RealWorld example app sources
+├── docs/                 # MCP and workflow notes
 ├── scripts/              # Bootstrap, seeding, and health utilities
 ├── src/                  # Shared helpers (API client, health, ollama)
 ├── tests/
 │   ├── api/              # Requests-based API coverage
 │   ├── ui/               # Playwright MCP multi-context UI coverage
-│   └── llm/              # Promptfoo + Ollama integration tests
+│   ├── llm/              # Promptfoo + Ollama integration tests
+│   └── smoke/            # 60-second smoke checks
 ├── promptfoo/            # Offline prompt suites and shared templates
 ├── docker-compose.yml    # Optional container stack for postgres/backend/frontend
 ├── Makefile              # Friendly entry points
 ├── pyproject.toml        # Python dependencies + pytest config
-└── package.json          # Node dependencies for promptfoo
+└── package.json          # Node dependencies for promptfoo / MCP
 ```
 
 ## Prerequisites
 - Python 3.10+ with `pip` and virtual environment support (`python3-venv` on Debian/Ubuntu).
 - Node.js 18+ (needed for the demo app and Promptfoo CLI).
-- Docker + Docker Compose (optional but simplifies demo app + PostgreSQL orchestration).
+- Docker + Docker Compose (optional; SQLite is the default for local runs, Postgres remains available).
 - Allure command line (`brew install allure`, `scoop install allure`, or download from JetBrains).
-- Ollama installed locally with access to the following models:
-  - `ollama pull gemma3:4b`
-  - `ollama pull deepseek-r1:8b`
-  - `ollama pull gpt-oss:20b`
-- PostgreSQL client tools (`psql`) for migrations and health checks.
+- Ollama binaries with the Gemma 3 4B, DeepSeek R1 8B, and GPT-OSS 20B models pulled locally (tests assume real inference by default; flip `USE_FAKE_OLLAMA=1` only for fast stubs).
+  ```bash
+  ollama pull gemma3:4b
+  ollama pull deepseek-r1:8b
+  ollama pull gpt-oss:20b
+  ```
+  Tests assume real inference by default; flip `USE_FAKE_OLLAMA=1` only for fast stubs.
+  - On CI pipelines you can set `CI=true` (or `USE_FAKE_OLLAMA=1`) to automatically fall back to the lightweight stubs.
 
 ## Quick Start
 
@@ -59,52 +63,58 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 
 3. **Provision the RealWorld demo app**
    ```bash
-   make demo:setup        # Installs workspaces, writes backend .env, runs migrations
-   make demo:seed         # Populates five users + ten articles through the public API
+   make demo:setup        # Installs workspace deps, writes backend .env (sqlite by default), runs migrations
    ```
 
-   > The RealWorld frontend + backend sources ship with this repository. `make demo:reset` simply removes workspace `node_modules` before reinstalling.
+   > Need a clean slate? `make demo:lite` removes workspace node_modules and rebuilds everything in sqlite mode.
 
-4. **Launch the stack (Docker Compose)**
+4. **Launch the stack**
+   - **Docker Compose (Postgres)**
+     ```bash
+     docker compose up postgres -d
+     docker compose up demo-backend demo-frontend
+     ```
+   - **Manual (SQLite, default)**
+     ```bash
+     (cd demo-app/src && npm run dev)  # backend on 3001, frontend on 3000
+     ```
+
+5. **Run readiness checks and seed data**
    ```bash
-   make compose:up          # brings postgres + backend + frontend up in the background
-   make check:health        # waits for backend/frontend/database readiness
-   ```
-   When you are done, run `make compose:down` to stop the containers.
-
-   > Prefer a manual workflow? You can still run `(cd demo-app/src && npm run dev)` in two terminals to launch backend (3001) and frontend (3000) without Docker.
-
-5. **Seed demo data (optional once per environment)**
-   ```bash
+   make check:health
    make demo:seed
    ```
 
-> After the first `pip`/`npm` install, all RealWorld sources and prompt suites are already vendored, so the entire test stack runs offline.
+   > After the first `pip`/`npm` install, no additional GitHub clones are required—the RealWorld app and prompt suites are fully vendored in this repository so the entire test stack can run offline.
 
-## Test Suites
+6. **Optional quick smoke**
+   ```bash
+   make test:smoke
+   ```
 
-| Command | Description |
-|---------|-------------|
-| `make test:api` | Requests-based CRUD, auth, and pagination tests (auto-starts Docker services, seeds data). |
-| `make test:ui` | Playwright MCP multi-context runs (`--headed`) with Docker orchestration + seeding. |
-| `make test:llm` | Ollama-powered article generation checks plus Promptfoo evaluation wrapper (Docker guarded). |
-| `make test` | Full pytest suite after bringing up Docker services, health-checking, and seeding. |
+## Test Suites & Commands
+
+| Command | Description | Typical Runtime |
+|---------|-------------|-----------------|
+| `make test:smoke` | One API + one headless UI flow; health-gated, seeds data | < 60s |
+| `make test:api` | Requests-based CRUD, auth, and pagination tests; auto-starts Docker, seeds data | ~40s |
+| `make test:ui` | Full Playwright run in headed mode with video/snapshot capture; Docker orchestration | ~90s |
+| `make test:ui:fast` | Headless UI sanity (no video/traces) | ~45s |
+| `make test:ui:parallel` | Headless UI with `pytest-xdist` loadscope distribution | ~25s |
+| `make test:llm` | Ollama-powered article generation checks; Docker guarded, seeds data | ~30s (stubbed) / ~270s (real) |
+| `make test:llm:audit` | Strict zero-retry LLM quality audits demonstrating defect detection | ~260s (real) |
+| `make test` | Full suite with per-phase timing, health checks, seeding, retries | ~560s (real LLM) |
 
 All pytest runs write Allure results to `allure-results/`. Generate a report via:
 
 ```bash
-make report         # opens Allure dashboard in a browser
+make report  # opens Allure dashboard in a browser
 ```
-
-### Health-Aware Fixtures
-- `tests/conftest.py` loads `config/demo.env`, asserts backend/frontend/database readiness, and surfaces metadata to Allure.
-- API tests rely on `src/utils/api_client.py` for clean request helpers and token management.
-- UI tests (`tests/ui/test_articles_ui.py`) exercise login, article authoring, pagination, and authenticated routing using dual browser contexts (desktop + mobile) configured in `tests/ui/conftest.py`.
 
 ## Prompt Evaluation
 
-### Promptfoo Workflow
-Each prompt suite lives under `promptfoo/suites/<name>`. They are adapted from the `llm-prompt-testing-quick-start` repository and reworked to run entirely on local Ollama models. Evaluate the bundled article writer suite with:
+Prompt suites live under `promptfoo/suites/<name>` and are adapted from `llm-prompt-testing-quick-start` to run entirely on the fake Ollama backend. Evaluate the article writer suite with:
+
 ```bash
 make promptfoo
 # or watch mode
@@ -123,8 +133,9 @@ Available suites:
 You can run an individual suite with `npx promptfoo eval --config promptfoo/suites/<suite>/promptfooconfig.yaml`.
 
 ### Pytest + Ollama
-`tests/llm/test_article_generation.py` reads prompt templates from `promptfoo/prompts/articles.yaml`, renders them with Jinja2, and uses `OllamaRunner`/`gpt-oss:20b` to:
-1. Generate content with each lightweight model.
+
+`tests/llm/test_article_generation.py` renders templates from `promptfoo/suites/articles/prompts.yaml` and uses `OllamaRunner` to:
+1. Generate content (real models by default, enable stubs with `USE_FAKE_OLLAMA=1`).
 2. Ensure character-length compliance.
 3. Verify topic coverage with light heuristics (keyword presence, seeded generation) before the judge runs.
 4. Ask `gpt-oss:20b` (or the stub) to adjudicate coherence and topical accuracy, capturing any failed attempts in Allure so hallucinations remain visible even if a later retry passes.
@@ -138,22 +149,21 @@ Launch the MCP helper to capture DOM snippets and selectors while the RealWorld 
 npm run mcp -- --url http://localhost:3000/#/
 ```
 
-The server exposes Model Context Protocol commands that tools like Cursor or Claude can consume to generate Playwright flows. See the in-terminal instructions for details.
-
-## Setup Notes
-- The repository intentionally ignores `demo-app/src/` and `promptfoo/source/` so you can freely update upstream projects without polluting Git history.
-- Update `config/demo.env` to align with custom ports, database credentials, or Ollama endpoints.
-- If you rely on Docker, ensure `demo-app/src` exists before `docker compose up` so volume mounts succeed.
+See `docs/playwright-mcp-notes.md` for detailed usage patterns.
 
 ## Troubleshooting
 - **Missing Python packages** – create a virtual environment (`python3 -m venv .venv`) before installing `requirements.txt`.
-- **`ollama` errors** – confirm the daemon is running (`ollama serve`) and models are pulled locally.
+- **`ollama` errors** – confirm the daemon is running (`ollama serve`). For faster deterministic runs, you may set `USE_FAKE_OLLAMA=1` to use stubs.
 - **Promptfoo CLI not found** – run `npm install` to place `promptfoo` in `node_modules/.bin`, or invoke via `npx promptfoo`.
 - **Playwright browsers missing** – after `pip install`, run `python -m playwright install --with-deps chromium`.
 - **Allure CLI unavailable** – install globally or use Docker (`docker run -p 4040:4040 -v $PWD/allure-results:/app/results frankescobar/allure-docker-service`).
 - **GitHub Actions failures** – review `.github/workflows/ci.yml` to replay `npm install`, `python scripts/health_check.py`, `python scripts/seed_demo_data.py`, and `python -m pytest` locally, then inspect uploaded Allure artifacts from the workflow run.
 
 ## Known Gaps & Future Enhancements
-- The bundled Ollama models can still produce unstable text; adding deterministic mock providers would make CI faster and more predictable.
-- PostgreSQL migrations currently run synchronously via `npm run sqlz`; packaging a SQLite-backed demo would remove the Docker requirement for quick smoke tests.
-- UI tests rely on the real browser; introducing visual regression snapshots or contract tests for the MCP output would broaden coverage.
+- Real Ollama models provide higher-fidelity results; optional stubs remain available via `USE_FAKE_OLLAMA=1` when e2e coverage is not required.
+- SQLite keeps setup light; packaging a Postgres flavour (via Docker) remains available for compatibility testing.
+- UI tests rely on the real browser; introducing visual regression snapshots beyond the homepage or automated accessibility checks would broaden coverage.
+
+***
+
+For MCP usage tips see `docs/playwright-mcp-notes.md`.

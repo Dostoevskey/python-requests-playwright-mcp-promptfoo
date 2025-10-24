@@ -21,9 +21,10 @@ endif
 UI_ENV_FILE := $(or $(DEMO_ENV_FILE),$(ENV_FILE))
 
 install:
-	$(PYTHON) -m pip install -r requirements.txt
-	npm install
-	$(PYTHON) -m playwright install --with-deps $(PLAYWRIGHT_BROWSER)
+	$(PYTHON) -m pip install --upgrade pip --break-system-packages
+	$(PYTHON) -m pip install -r requirements.txt --break-system-packages
+	npm install --prefer-offline --no-fund
+	$(PYTHON) -m playwright install $(PLAYWRIGHT_BROWSER)
 
 compose\:up:
 	docker compose up -d postgres demo-backend demo-frontend
@@ -32,10 +33,16 @@ compose\:down:
 	docker compose down
 
 lint:
-	$(PYTHON) -m pytest --collect-only
+	$(PYTEST) --collect-only
 
 check\:health:
 	$(PYTHON) scripts/health_check.py --env-file config/demo.env
+
+demo\:setup:
+	bash scripts/bootstrap_demo_app.sh
+
+demo\:lite:
+	DB_DIALECT=sqlite DB_STORAGE=./demo-app/realworld.sqlite USE_FAKE_OLLAMA=1 bash scripts/bootstrap_demo_app.sh --reset
 
 promptfoo:
 	npm run promptfoo:test
@@ -43,10 +50,20 @@ promptfoo:
 promptfoo-watch:
 	npm run promptfoo:test:watch
 
-DemoSetup: demo\:setup
+promptfoo-view:
+	npm run promptfoo:view
 
-demo\:setup:
-	bash scripts/bootstrap_demo_app.sh
+mcp:
+	npm run mcp
+
+demo\:servers\:start:
+	python scripts/manage_demo_servers.py start --env-file $(ENV_FILE)
+
+demo\:servers\:stop:
+	python scripts/manage_demo_servers.py stop --env-file $(ENV_FILE)
+
+demo\:servers\:status:
+	python scripts/manage_demo_servers.py status --env-file $(ENV_FILE)
 
 DemoSeed: demo\:seed
 
@@ -56,13 +73,8 @@ demo\:seed:
 	sleep 3
 	$(PYTHON) scripts/seed_demo_data.py --env-file config/demo.env
 
-DemoReset: demo\:reset
-
-demo\:reset:
-	bash scripts/bootstrap_demo_app.sh --reset
-	$(PYTHON) scripts/seed_demo_data.py --env-file config/demo.env
-
-PlaywrightUI: test\:ui
+logs\:clean:
+	rm -f logs/*.log logs/*.log.*
 
 test\:api:
 	@bash -c 'set -euo pipefail; \
@@ -180,4 +192,4 @@ test:
 report:
 	allure serve allure-results
 
-.PHONY: install compose\:up compose\:down lint check\:health promptfoo promptfoo-watch demo\:setup demo\:seed demo\:reset test\:api test\:ui test\:smoke test\:llm test\:llm\:audit test report
+.PHONY: install compose\:up compose\:down lint check\:health promptfoo promptfoo-watch promptfoo-view mcp demo\:setup demo\:lite demo\:seed demo\:servers\:start demo\:servers\:stop demo\:servers\:status logs\:clean test\:api test\:ui test\:smoke test\:llm test\:llm\:audit test report

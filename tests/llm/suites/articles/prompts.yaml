@@ -1,0 +1,35 @@
+metadata:
+  description: Article writing prompts for local Ollama validation
+  version: 1
+
+prompts:
+  - id: concise_article
+    label: Concise Article Writer
+    template: |
+      You are a concise technical writer.
+      Write a clear article between 300 and 500 characters.
+      Topic: {{ topic }}
+      Tone: {{ tone }}
+      Audience: {{ audience }}
+      Include a brief intro sentence, one supporting detail, and a closing call to action.
+      Avoid lists, tables, or markdown formatting. Keep sentences complete and coherent.
+      Respond only with the article text. Do not ask follow-up questions.
+      The final article must be between 300 and 500 characters (inclusive).
+      Write exactly four sentences.
+
+scenarios:
+  - id: api_smoke_article
+    vars:
+      topic: API smoke testing essentials
+      tone: encouraging
+      audience: new automation engineers
+  - id: ui_locator_article
+    vars:
+      topic: Locator strategies for Playwright MCP sessions
+      tone: informative
+      audience: UI testers working in VS Code or Cursor
+  - id: prompt_validation_article
+    vars:
+      topic: Validating LLM outputs with promptfoo and Allure
+      tone: pragmatic
+      audience: quality engineers adopting local LLMs

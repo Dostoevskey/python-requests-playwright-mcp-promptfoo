@@ -11,11 +11,16 @@ artifacts/
 .promptfoo/
 .demo-app-cache/
 .demo-seeded/
+demo-app/node_modules/
+demo-app/dist/
+demo-app/.postgres-data/
+demo-app/realworld.sqlite
 demo-app/src/node_modules/
 demo-app/src/backend/node_modules/
 demo-app/src/frontend/node_modules/
-demo-app/.postgres-data/
+demo-app/src/frontend/.vite/
 promptfoo/.promptfoo-cache/
 .idea/
 .vscode/
 .DS_Store
+logs/

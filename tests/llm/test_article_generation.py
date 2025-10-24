@@ -16,7 +16,8 @@ from src.utils.ollama_client import OllamaRunner
 
 LOGGER = get_logger(__name__)
 
-PROMPTS_FILE = Path("promptfoo/prompts/articles.yaml")
+SUITE_DIR = Path(__file__).resolve().parent / "suites" / "articles"
+PROMPTS_FILE = SUITE_DIR / "prompts.yaml"
 GENERATOR_MODELS = ["gemma3:4b", "deepseek-r1:8b"]
 JUDGE_MODEL = "gpt-oss:20b"
 default_fake = "1" if os.environ.get("CI", "").lower() in {"1", "true", "yes"} else "0"

@@ -1,52 +1,51 @@
 from __future__ import annotations
 
+import os
 from typing import Dict, Generator
 
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
 
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 @pytest.fixture(scope="session")
-def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, BrowserContext], None, None]:
-    """
-    Provide two contexts (desktop + mobile) for multi-context UI tests.
-    Use an explicit mobile options dict to avoid importing `devices` from Playwright,
-    and place video artifacts in per-run temp dirs.
-    """
+def multi_context(browser: Browser) -> Generator[Dict[str, BrowserContext], None, None]:
     contexts: Dict[str, BrowserContext] = {}
-    videos_dir = tmp_path_factory.mktemp("playwright_videos")
-    videos_mobile = tmp_path_factory.mktemp("playwright_videos_mobile")
+    record_dir = os.environ.get("PLAYWRIGHT_RECORD", "0").lower() in {"1", "true"}
+    context_kwargs = {}
+    if record_dir:
+        context_kwargs["record_video_dir"] = "playwright-report"
 
-    # Minimal mobile emulation options (sufficient for most responsive UI tests)
-    mobile_opts = {
-        "viewport": {"width": 414, "height": 896},
-        "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
-        "device_scale_factor": 3,
-        "is_mobile": True,
-        "has_touch": True,
-    }
-
+    init_script = """
+        window.localStorage.clear();
+        window.sessionStorage.clear();
+        const style = document.createElement('style');
+        style.innerHTML = '* { transition-duration: 0s !important; animation-duration: 0s !important; }';
+        document.head.appendChild(style);
+    """
     try:
         contexts["desktop"] = browser.new_context(
             viewport={"width": 1440, "height": 900},
-            record_video_dir=str(videos_dir),
+            **context_kwargs,
         )
-        contexts["desktop"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
-
+        contexts["desktop"].add_init_script(init_script)
         contexts["mobile"] = browser.new_context(
-            **mobile_opts,
-            record_video_dir=str(videos_mobile),
+            viewport={"width": 414, "height": 896},
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
+            device_scale_factor=3,
+            is_mobile=True,
+            **context_kwargs,
         )
-        contexts["mobile"].add_init_script("window.localStorage.clear(); window.sessionStorage.clear();")
-
+        contexts["mobile"].add_init_script(init_script)
+        logger.info("Playwright contexts initialised (record=%s)", record_dir)
         yield contexts
     finally:
-        # Ensure contexts are closed even if tests fail
         for context in contexts.values():
-            try:
-                context.close()
-            except Exception:
-                pass
+            context.close()
+        logger.debug("Playwright contexts closed")
 
 
 
@@ -59,6 +58,9 @@ def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> G
       - create an author via the API (ApiClient)
       - set the auth token into localStorage for the page context before navigation
     """
+    for context in multi_context.values():
+        context.clear_cookies()
+    
     pages: Dict[str, Page] = {}
     for name, ctx in multi_context.items():
         page = ctx.new_page()
@@ -66,6 +68,7 @@ def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> G
         page.goto(settings.frontend_url)
         pages[name] = page
 
+    logger.debug("Spawned pages: %s", list(pages.keys()))
     try:
         yield pages
     finally:
@@ -74,3 +77,4 @@ def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> G
                 page.close()
             except Exception:
                 pass
+        logger.debug("Pages closed")
