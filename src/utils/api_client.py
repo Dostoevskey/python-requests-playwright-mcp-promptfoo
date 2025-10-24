@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 
 DEFAULT_TIMEOUT = 10  # seconds
 
+
 @dataclass
 class UserCredentials:
     username: str
@@ -29,6 +30,7 @@ class ApiError(RuntimeError):
     def __init__(self, message: str, status: Optional[int] = None, body: Optional[str] = None) -> None:
         super().__init__(message)
         self.status = status
+        self.status_code = status  # Alias for consistency
         self.body = body
 
 
@@ -62,6 +64,13 @@ class ApiClient:
         recipe = factory.user(prefix)
         logger.debug("Generated credentials for prefix %s -> %s", prefix, recipe.username)
         return UserCredentials(**recipe.model_dump())
+
+    def unique_title(self, base: str, separator: str = " ") -> str:
+        """Generate a unique article title to avoid 422 duplicate errors."""
+        import random
+        import string
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        return f"{base}{separator}{suffix}"
 
     # User endpoints -----------------------------------------------------
 
@@ -167,6 +176,53 @@ class ApiClient:
         logger.info("Deleting article %s for %s", slug, creds.username)
         response = self.session.delete(f"{self.base_url}/articles/{slug}", headers=headers, timeout=self.timeout)
         self._raise_for_status(response, expected=(200, 204))
+
+    def favorite_article(self, creds: UserCredentials, slug: str) -> dict[str, Any]:
+        """Favorite an article."""
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
+        response = self.session.post(f"{self.base_url}/articles/{slug}/favorite", headers=headers, timeout=self.timeout)
+        return self._raise_for_status(response, expected=(200, 201))
+
+    def unfavorite_article(self, creds: UserCredentials, slug: str) -> dict[str, Any]:
+        """Unfavorite an article."""
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
+        response = self.session.delete(f"{self.base_url}/articles/{slug}/favorite", headers=headers, timeout=self.timeout)
+        return self._raise_for_status(response, expected=(200, 204))
+
+    # Comment endpoints --------------------------------------------------
+
+    def add_comment(self, creds: UserCredentials, slug: str, body: str) -> dict[str, Any]:
+        """Add a comment to an article."""
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
+        payload = {"comment": {"body": body}}
+        response = self.session.post(
+            f"{self.base_url}/articles/{slug}/comments",
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+        )
+        return self._raise_for_status(response, expected=(200, 201))
+
+    def get_comments(self, slug: str) -> dict[str, Any]:
+        """Get all comments for an article."""
+        response = self.session.get(f"{self.base_url}/articles/{slug}/comments", timeout=self.timeout)
+        return self._raise_for_status(response, expected=(200,))
+
+    def delete_comment(self, creds: UserCredentials, slug: str, comment_id: int) -> None:
+        """Delete a comment from an article."""
+        headers = {"Authorization": f"Token {creds.token}"} if creds.token else {}
+        response = self.session.delete(
+            f"{self.base_url}/articles/{slug}/comments/{comment_id}",
+            headers=headers,
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response, expected=(200, 204))
+
+    def close(self) -> None:
+        try:
+            self.session.close()
+        except Exception:
+            pass
 
 
 __all__ = ["ApiClient", "ApiError", "UserCredentials"]

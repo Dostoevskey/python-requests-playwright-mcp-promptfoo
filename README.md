@@ -64,7 +64,6 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 3. **Provision the RealWorld demo app**
    ```bash
    make demo:setup        # Installs workspace deps, writes backend .env (sqlite by default), runs migrations
-   make demo:seed         # Populates five users + ten articles through the public API
    ```
 
    > Need a clean slate? `make demo:lite` removes workspace node_modules and rebuilds everything in sqlite mode.
@@ -80,9 +79,10 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
      (cd demo-app/src && npm run dev)  # backend on 3001, frontend on 3000
      ```
 
-5. **Run readiness checks**
+5. **Run readiness checks and seed data**
    ```bash
    make check:health
+   make demo:seed
    ```
 
    > After the first `pip`/`npm` install, no additional GitHub clones are required—the RealWorld app and prompt suites are fully vendored in this repository so the entire test stack can run offline.
@@ -96,13 +96,14 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 
 | Command | Description | Typical Runtime |
 |---------|-------------|-----------------|
-| `make test:smoke` | One API + one headless UI flow | < 60s |
-| `make test:api` | Requests-based CRUD, auth, and pagination tests (xdist) | ~40s |
-| `make test:ui` | Full Playwright run in headed mode with video/snapshot capture | ~90s |
+| `make test:smoke` | One API + one headless UI flow; health-gated, seeds data | < 60s |
+| `make test:api` | Requests-based CRUD, auth, and pagination tests; auto-starts Docker, seeds data | ~40s |
+| `make test:ui` | Full Playwright run in headed mode with video/snapshot capture; Docker orchestration | ~90s |
 | `make test:ui:fast` | Headless UI sanity (no video/traces) | ~45s |
 | `make test:ui:parallel` | Headless UI with `pytest-xdist` loadscope distribution | ~25s |
-| `make test:llm` | Offline-stubbed Promptfoo + Ollama checks | ~30s |
-| `make test` | Full suite (`-n auto`, reruns enabled) | ~3m |
+| `make test:llm` | Ollama-powered article generation checks; Docker guarded, seeds data | ~30s (stubbed) / ~270s (real) |
+| `make test:llm:audit` | Strict zero-retry LLM quality audits demonstrating defect detection | ~260s (real) |
+| `make test` | Full suite with per-phase timing, health checks, seeding, retries | ~560s (real LLM) |
 
 All pytest runs write Allure results to `allure-results/`. Generate a report via:
 
@@ -133,10 +134,11 @@ You can run an individual suite with `npx promptfoo eval --config promptfoo/suit
 
 ### Pytest + Ollama
 
-`tests/llm/test_article_generation.py` renders templates from `promptfoo/prompts/articles.yaml` and uses `OllamaRunner` to:
+`tests/llm/test_article_generation.py` renders templates from `promptfoo/suites/articles/prompts.yaml` and uses `OllamaRunner` to:
 1. Generate content (real models by default, enable stubs with `USE_FAKE_OLLAMA=1`).
 2. Ensure character-length compliance.
-3. Ask `gpt-oss:20b` (or the stub) to adjudicate coherence and topical accuracy.
+3. Verify topic coverage with light heuristics (keyword presence, seeded generation) before the judge runs.
+4. Ask `gpt-oss:20b` (or the stub) to adjudicate coherence and topical accuracy, capturing any failed attempts in Allure so hallucinations remain visible even if a later retry passes.
 
 Outputs, prompts, and judge decisions are attached to Allure for traceability.
 

@@ -32,19 +32,31 @@ class OllamaRunner:
         self.client = None if self.use_fake else Client(host=base_url)
         self._chat_models = {"deepseek-r1:8b"}
 
-    def ensure_model(self, model: str) -> bool:
+    def _real_mode(self) -> bool:
+        # Re-evaluate flag on each call to pick up late env changes (xdist workers, etc.)
+        self.use_fake = os.environ.get("USE_FAKE_OLLAMA", _default_fake_flag()).lower() in {"1", "true", "yes"}
         if self.use_fake:
+            self.client = None
+            return False
+        if self.client is None:
+            self.client = Client(host=self.base_url)
+        return True
+
+    def ensure_model(self, model: str) -> bool:
+        if not self._real_mode():
             return True
         try:
+            assert self.client is not None
             self.client.show(model=model)
             return True
         except Exception:  # noqa: BLE001
             return False
 
     def generate(self, model: str, prompt: str, options: dict[str, Any] | None = None) -> OllamaModelResult:
-        if self.use_fake:
+        if not self._real_mode():
             return self._fake_response(model, prompt)
         try:
+            assert self.client is not None
             if model in self._chat_models:
                 chat_options = {**(options or {})}
                 chat_options.pop("num_predict", None)
@@ -53,11 +65,19 @@ class OllamaRunner:
                     messages=[{"role": "user", "content": prompt}],
                     options=chat_options or None,
                 )
-                output = chat_response.message.content or ""
-                tokens: dict[str, Any] = {
-                    "prompt": getattr(chat_response, "prompt_eval_count", None),
-                    "completion": getattr(chat_response, "eval_count", None),
-                }
+                if isinstance(chat_response, dict):
+                    message = chat_response.get("message") or {}
+                    output = (message.get("content") or "").strip()
+                    tokens: dict[str, Any] = {
+                        "prompt": chat_response.get("prompt_eval_count"),
+                        "completion": chat_response.get("eval_count"),
+                    }
+                else:
+                    output = getattr(getattr(chat_response, "message", None), "content", "") or ""
+                    tokens = {
+                        "prompt": getattr(chat_response, "prompt_eval_count", None),
+                        "completion": getattr(chat_response, "eval_count", None),
+                    }
             else:
                 response = self.client.generate(model=model, prompt=prompt, options=options or {})
                 output = response.get("response", "")
@@ -69,10 +89,18 @@ class OllamaRunner:
             raise OllamaUnavailableError(f"Failed to generate with {model}: {exc}") from exc
         return OllamaModelResult(model=model, output=output, tokens=tokens)
 
-    def evaluate_with_judge(self, judge_model: str, article: str, topic: str) -> tuple[bool, str]:
-        if self.use_fake:
+    def evaluate_with_judge(
+        self,
+        judge_model: str,
+        article: str,
+        topic: str,
+        *,
+        seed_override: int | None = None,
+    ) -> tuple[bool, str]:
+        if not self._real_mode():
             digest = hashlib.md5(f"{judge_model}:{topic}".encode()).hexdigest()
             return True, f"PASS stub-{digest[:6]}"
+
         prompt = (
             "You are a critical reviewer. Decide if the article below stays on topic, is coherent, "
             "and avoids hallucinations. Respond with PASS if it meets all criteria, otherwise respond "
@@ -80,7 +108,12 @@ class OllamaRunner:
             f"Topic: {topic}\n"
             "Article:\n" + article.strip()
         )
-        result = self.generate(judge_model, prompt, options={"temperature": 0.1})
+        judge_options: dict[str, Any] = {"temperature": 0.1}
+        if seed_override is not None:
+            judge_options["seed"] = seed_override
+        else:
+            judge_options["seed"] = int(hashlib.md5(f"judge::{topic}".encode()).hexdigest()[:8], 16)
+        result = self.generate(judge_model, prompt, options=judge_options)
         decision_text = result.output.strip()
         decision = decision_text.split()[0].upper() if decision_text else ""
         return decision == "PASS", decision_text
@@ -109,9 +142,9 @@ class OllamaRunner:
         topic = topic_match.group(1).strip() if topic_match else "demo topic"
         base = (
             f"This offline article stub {digest[:4]} keeps the scenario reproducible while summarising {topic}. "
-            f"It highlights the deterministic pipeline, referencing hash {digest[4:8]} to guarantee identical results. "
-            "The third sentence explains that all checks run locally with sqlite and fake Ollama outputs for speed. "
-            "Finally, the closing sentence invites readers to enable real models whenever they need richer coverage."
+            f"It highlights the deterministic pipeline, referencing hash {digest[4:8]} for identical runs. "
+            "The third sentence explains the suite runs locally with docker-compose services and fake Ollama outputs. "
+            "Finally, the closing sentence nudges you to enable real models when richer coverage is required."
         )
         article = base.strip()
         if len(article) < 300:
@@ -123,13 +156,13 @@ class OllamaRunner:
         rank = int(digest[:2], 16) % 5 + 1
         passable = rank >= 3
         reason = f"score{rank}-{digest[2:8]}"[:38]
-        return f"{{\"rank\": {rank}, \"passable\": {str(passable).lower()}, \"reason\": \"{reason}\"}}"
+        return f'{{"rank": {rank}, "passable": {str(passable).lower()}, "reason": "{reason}"}}'
 
     @staticmethod
     def _fake_minimal_json(digest: str) -> str:
         ok = int(digest[0], 16) % 2 == 0
         reason = ("ok" if ok else "fail") + digest[1:6]
-        return f"{{\"ok\": {str(ok).lower()}, \"reason\": \"{reason[:18]}\"}}"
+        return f'{{"ok": {str(ok).lower()}, "reason": "{reason[:18]}"}}'
 
     @staticmethod
     def _fake_sql(prompt: str, digest: str) -> str:

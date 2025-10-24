@@ -48,15 +48,33 @@ def multi_context(browser: Browser) -> Generator[Dict[str, BrowserContext], None
         logger.debug("Playwright contexts closed")
 
 
+
+
 @pytest.fixture
-def author_reader_pages(multi_context: Dict[str, BrowserContext]) -> Generator[Dict[str, Page], None, None]:
+def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> Generator[Dict[str, Page], None, None]:
+    """
+    Create Page objects for each context and navigate to the frontend root.
+    If tests require authenticated author state, extend this fixture to:
+      - create an author via the API (ApiClient)
+      - set the auth token into localStorage for the page context before navigation
+    """
     for context in multi_context.values():
         context.clear_cookies()
-    pages = {name: context.new_page() for name, context in multi_context.items()}
+    
+    pages: Dict[str, Page] = {}
+    for name, ctx in multi_context.items():
+        page = ctx.new_page()
+        # Navigate to the app root so pages are ready for test actions
+        page.goto(settings.frontend_url)
+        pages[name] = page
+
     logger.debug("Spawned pages: %s", list(pages.keys()))
     try:
         yield pages
     finally:
         for page in pages.values():
-            page.close()
+            try:
+                page.close()
+            except Exception:
+                pass
         logger.debug("Pages closed")

@@ -1,3 +1,4 @@
+"""Central logging utilities for the automation stack."""
 from __future__ import annotations
 
 import logging
