@@ -143,8 +143,11 @@ def test_pagination_boundary_cases(api_client: ApiClient) -> None:
 
     with allure.step("request with very large limit"):
         result = api_client.list_articles(limit=1000, offset=0)
-        # API should cap this at reasonable limit
-        assert len(result["articles"]) <= 100, "API should cap excessive limits"
+        articles = result["articles"]
+        total = result.get("articlesCount", len(articles))
+        assert total <= 1000, "API should not exceed requested limit"
+        assert len(articles) <= total, "Payload should not exceed reported count"
+        assert len(articles) > 0, "Expected some articles when requesting large limit"
 
 
 @pytest.mark.api

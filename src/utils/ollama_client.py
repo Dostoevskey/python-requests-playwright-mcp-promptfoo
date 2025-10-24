@@ -100,6 +100,7 @@ class OllamaRunner:
         if not self._real_mode():
             digest = hashlib.md5(f"{judge_model}:{topic}".encode()).hexdigest()
             return True, f"PASS stub-{digest[:6]}"
+
         prompt = (
             "You are a critical reviewer. Decide if the article below stays on topic, is coherent, "
             "and avoids hallucinations. Respond with PASS if it meets all criteria, otherwise respond "
@@ -107,10 +108,12 @@ class OllamaRunner:
             f"Topic: {topic}\n"
             "Article:\n" + article.strip()
         )
-        judge_seed = seed_override
-        if judge_seed is None:
-            judge_seed = int(hashlib.md5(f"judge::{topic}".encode()).hexdigest()[:8], 16)
-        result = self.generate(judge_model, prompt, options={"temperature": 0.1, "seed": judge_seed})
+        judge_options: dict[str, Any] = {"temperature": 0.1}
+        if seed_override is not None:
+            judge_options["seed"] = seed_override
+        else:
+            judge_options["seed"] = int(hashlib.md5(f"judge::{topic}".encode()).hexdigest()[:8], 16)
+        result = self.generate(judge_model, prompt, options=judge_options)
         decision_text = result.output.strip()
         decision = decision_text.split()[0].upper() if decision_text else ""
         return decision == "PASS", decision_text
