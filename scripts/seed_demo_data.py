@@ -54,6 +54,23 @@ def _get_auth_session(token: Optional[str] = None) -> requests.Session:
     return sess
 
 
+def _wait_for_backend(base_url: str, retries: int, backoff: float) -> None:
+    health_url = os.environ.get("BACKEND_HEALTH_ENDPOINT") or f"{base_url}/articles"
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.get(health_url, timeout=5)
+            if resp.status_code < 500:
+                return
+        except Exception as exc:  # noqa: BLE001
+            if attempt == retries:
+                raise RuntimeError(f"Backend at {health_url} unavailable: {exc}") from exc
+        wait = backoff * attempt
+        print(f"[seed] backend not ready (attempt {attempt}); waiting {wait:.1f}s")
+        import time
+
+        time.sleep(wait)
+
+
 def register_user(session: requests.Session, base_url: str, user: dict[str, Any], password: str) -> UserContext:
     payload = {"user": {"username": user["username"], "email": user["email"], "password": password}}
     resp = session.post(f"{base_url}/users", json=payload, timeout=15)
@@ -152,6 +169,11 @@ def main() -> int:
     password = os.environ.get("DEFAULT_PASSWORD", "Password123!")
     data_path = Path(__file__).parent / "../promptfoo" / "seed" / "seed.json"
 
+    retry_attempts = int(os.environ.get("SEED_RETRIES", 5))
+    backoff = float(os.environ.get("SEED_BACKOFF", 2.0))
+
+    _wait_for_backend(base_url, retry_attempts, backoff)
+
     # Fallback: if no seed bundle, use built-in small sample
     if not data_path.exists():
         sample = {
@@ -170,10 +192,24 @@ def main() -> int:
     session = _get_auth_session()
 
     created_users: dict[str, UserContext] = {}
+
+    def _with_retry(fn, *args, **kwargs):
+        for attempt in range(1, retry_attempts + 1):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if attempt == retry_attempts:
+                    raise
+                wait = backoff * attempt
+                print(f"[seed] attempt {attempt} failed: {exc}; retrying in {wait:.1f}s")
+                import time
+
+                time.sleep(wait)
+
     for u in sample.get("users", []):
-        uc = register_user(session, base_url, u, password)
+        uc = _with_retry(register_user, session, base_url, u, password)
         created_users[uc.username] = uc
-        ensure_profile(session, base_url, uc, bio=u.get("bio"))
+        _with_retry(ensure_profile, session, base_url, uc, bio=u.get("bio"))
 
     # Use one of the authors as token for article operations
     # Fallback to first created user

@@ -7,6 +7,7 @@ node_modules/
 allure-results/
 allure-report/
 playwright-report/
+artifacts/
 .promptfoo/
 .demo-app-cache/
 .demo-seeded/

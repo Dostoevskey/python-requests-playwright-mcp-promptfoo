@@ -4,7 +4,6 @@ from typing import Dict, Generator
 
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
-from pathlib import Path
 
 
 @pytest.fixture(scope="session")
@@ -50,6 +49,8 @@ def multi_context(browser: Browser, tmp_path_factory) -> Generator[Dict[str, Bro
                 pass
 
 
+
+
 @pytest.fixture
 def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> Generator[Dict[str, Page], None, None]:
     """
@@ -59,16 +60,17 @@ def author_reader_pages(multi_context: Dict[str, BrowserContext], settings) -> G
       - set the auth token into localStorage for the page context before navigation
     """
     pages: Dict[str, Page] = {}
+    for name, ctx in multi_context.items():
+        page = ctx.new_page()
+        # Navigate to the app root so pages are ready for test actions
+        page.goto(settings.frontend_url)
+        pages[name] = page
+
     try:
-        for name, ctx in multi_context.items():
-            page = ctx.new_page()
-            # Navigate to the app root so pages are ready for test actions
-            page.goto(settings.frontend_url)
-            pages[name] = page
         yield pages
     finally:
-        for p in pages.values():
+        for page in pages.values():
             try:
-                p.close()
+                page.close()
             except Exception:
                 pass

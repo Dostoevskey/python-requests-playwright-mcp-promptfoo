@@ -14,6 +14,7 @@ from typing import Any, Iterator
 import allure
 import pytest
 from dotenv import load_dotenv
+from playwright.sync_api import Page
 
 from src.health.checks import (
     ReadinessTimeoutError,
@@ -89,6 +90,8 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "ui: UI tests requiring Playwright")
     config.addinivalue_line("markers", "api: API contract tests")
     config.addinivalue_line("markers", "llm: Prompt evaluation tests")
+    config.addinivalue_line("markers", "llm_audit: Strict zero-retry LLM quality audits")
+    config.addinivalue_line("markers", "smoke: Quick setup validation checks")
     session_logger.debug("Pytest configured with custom markers")
 
 
@@ -280,6 +283,34 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Itera
         hook_logger.debug("Setup %s -> %s", item.nodeid, rep.outcome)
     elif rep.when == "call":
         hook_logger.info("Test %s %s", item.nodeid, rep.outcome.upper())
+        if "ui" in item.keywords:
+            screenshots_root = Path("artifacts/playwright_screenshots")
+            screenshots_root.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+            node_slug = item.nodeid.replace("::", "__").replace("/", "_")
+            status = "passed" if rep.passed else "failed" if rep.failed else "skipped"
+            page_entries: list[tuple[str, Page]] = []
+            pages_dict = item.funcargs.get("author_reader_pages")
+            if isinstance(pages_dict, dict):
+                page_entries.extend((name, page) for name, page in pages_dict.items())
+            single_page = item.funcargs.get("page")
+            if isinstance(single_page, Page):
+                page_entries.append(("page", single_page))
+            for name, page in page_entries:
+                try:
+                    screenshot_path = screenshots_root / f"{timestamp}__{node_slug}__{name}__{status}.png"
+                    page.screenshot(path=str(screenshot_path), full_page=True)
+                    allure.attach.file(
+                        str(screenshot_path),
+                        name=f"{name}_{status}",
+                        attachment_type=allure.attachment_type.PNG,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    allure.attach(
+                        str(exc),
+                        name=f"{name}_screenshot_error",
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
     elif rep.when == "teardown":
         hook_logger.debug("Teardown %s -> %s", item.nodeid, rep.outcome)
     global runtime_total

@@ -30,6 +30,12 @@ services:
       - ./demo-app/src/backend/.env:/app/backend/.env:ro
     environment:
       NODE_ENV: development
+      DEV_DB_HOSTNAME: postgres
+      DEV_DB_LOGGING: "false"
+      TEST_DB_HOSTNAME: postgres
+      TEST_DB_LOGGING: "false"
+      PROD_DB_HOSTNAME: postgres
+      PROD_DB_LOGGING: "false"
     command: >-
       bash -lc "npm install && npm run sqlz -- db:migrate && npm run dev -w backend"
     ports:
