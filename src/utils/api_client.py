@@ -67,8 +67,10 @@ class ApiClient:
 
     def unique_title(self, base: str, separator: str = " ") -> str:
         """Generate a unique article title to avoid 422 duplicate errors."""
-        recipe = factory.article()
-        return f"{base}{separator}{recipe.title[-8:]}"
+        import random
+        import string
+        suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        return f"{base}{separator}{suffix}"
 
     # User endpoints -----------------------------------------------------
 
