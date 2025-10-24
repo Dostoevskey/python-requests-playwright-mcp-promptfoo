@@ -65,32 +65,30 @@ Automation workspace that provisions the Conduit RealWorld demo app, seeds deter
 
    > The RealWorld frontend + backend sources ship with this repository. `make demo:reset` simply removes workspace `node_modules` before reinstalling.
 
-4. **Launch the stack**
-   - **With Docker Compose**
-     ```bash
-     docker compose up postgres -d
-     docker compose up demo-backend demo-frontend
-     ```
-   - **Manual (two terminals)**
-     ```bash
-     (cd demo-app/src && npm run dev)  # starts backend (3001) + frontend (3000)
-     ```
+4. **Launch the stack (Docker Compose)**
+   ```bash
+   make compose:up          # brings postgres + backend + frontend up in the background
+   make check:health        # waits for backend/frontend/database readiness
+   ```
+   When you are done, run `make compose:down` to stop the containers.
 
-5. **Run readiness checks**
- ```bash
- make check:health
- ```
+   > Prefer a manual workflow? You can still run `(cd demo-app/src && npm run dev)` in two terminals to launch backend (3001) and frontend (3000) without Docker.
 
-> After the first `pip`/`npm` install, no additional GitHub clones are required—the RealWorld app and prompt suites are fully vendored in this repository so the entire test stack can run offline.
+5. **Seed demo data (optional once per environment)**
+   ```bash
+   make demo:seed
+   ```
+
+> After the first `pip`/`npm` install, all RealWorld sources and prompt suites are already vendored, so the entire test stack runs offline.
 
 ## Test Suites
 
 | Command | Description |
 |---------|-------------|
-| `make test:api` | Requests-based CRUD, auth, and pagination tests. |
-| `make test:ui` | Playwright MCP multi-context runs (`--headed` is enforced for IDE-friendly inspector). |
-| `make test:llm` | Ollama-powered article generation checks plus Promptfoo evaluation wrapper. |
-| `make test` | Runs the entire pytest suite. |
+| `make test:api` | Requests-based CRUD, auth, and pagination tests (auto-starts Docker services, seeds data). |
+| `make test:ui` | Playwright MCP multi-context runs (`--headed`) with Docker orchestration + seeding. |
+| `make test:llm` | Ollama-powered article generation checks plus Promptfoo evaluation wrapper (Docker guarded). |
+| `make test` | Full pytest suite after bringing up Docker services, health-checking, and seeding. |
 
 All pytest runs write Allure results to `allure-results/`. Generate a report via:
 
@@ -128,7 +126,8 @@ You can run an individual suite with `npx promptfoo eval --config promptfoo/suit
 `tests/llm/test_article_generation.py` reads prompt templates from `promptfoo/prompts/articles.yaml`, renders them with Jinja2, and uses `OllamaRunner`/`gpt-oss:20b` to:
 1. Generate content with each lightweight model.
 2. Ensure character-length compliance.
-3. Ask `gpt-oss:20b` to adjudicate coherence and topical accuracy.
+3. Verify topic coverage with light heuristics (keyword presence, seeded generation) before the judge runs.
+4. Ask `gpt-oss:20b` (or the stub) to adjudicate coherence and topical accuracy, capturing any failed attempts in Allure so hallucinations remain visible even if a later retry passes.
 
 Outputs, prompts, and judge decisions are attached to Allure for traceability.
 
